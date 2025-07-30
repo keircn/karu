@@ -94,13 +94,12 @@ func buildTrendingQuery() GraphQLQuery {
 
 func buildPopularQuery() GraphQLQuery {
 	return GraphQLQuery{
-		Query: `query($limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType, $sort: [VaildSortEnumType]) {
+		Query: `query($limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) {
 			shows(
 				limit: $limit
 				page: $page
 				translationType: $translationType
 				countryOrigin: $countryOrigin
-				sort: $sort
 			) {
 				edges {
 					_id
@@ -112,10 +111,9 @@ func buildPopularQuery() GraphQLQuery {
 		}`,
 		Variables: map[string]any{
 			"limit":           20,
-			"page":            1,
+			"page":            3,
 			"translationType": "sub",
 			"countryOrigin":   "JP",
-			"sort":            []string{"POPULAR"},
 		},
 	}
 }

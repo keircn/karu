@@ -48,16 +48,16 @@ func handleSearchMode() {
 }
 
 func handleTrendingMode() {
-	fmt.Println("Loading trending anime...")
+	fmt.Println("Loading recent anime...")
 
 	animes, err := scraper.GetTrending()
 	if err != nil {
-		fmt.Printf("Error getting trending anime: %v\n", err)
+		fmt.Printf("Error getting recent anime: %v\n", err)
 		return
 	}
 
 	if len(animes) == 0 {
-		fmt.Println("No trending anime found.")
+		fmt.Println("No recent anime found.")
 		return
 	}
 
@@ -75,16 +75,16 @@ func handleTrendingMode() {
 }
 
 func handlePopularMode() {
-	fmt.Println("Loading popular anime...")
+	fmt.Println("Loading anime catalog...")
 
 	animes, err := scraper.GetPopular()
 	if err != nil {
-		fmt.Printf("Error getting popular anime: %v\n", err)
+		fmt.Printf("Error getting anime catalog: %v\n", err)
 		return
 	}
 
 	if len(animes) == 0 {
-		fmt.Println("No popular anime found.")
+		fmt.Println("No anime found in catalog.")
 		return
 	}
 

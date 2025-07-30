@@ -11,8 +11,8 @@ type BrowseMode string
 
 const (
 	BrowseModeSearch   BrowseMode = "search"
-	BrowseModePopular  BrowseMode = "popular"
-	BrowseModeTrending BrowseMode = "trending"
+	BrowseModePopular  BrowseMode = "catalog"
+	BrowseModeTrending BrowseMode = "recent"
 )
 
 type browseItem struct {
@@ -32,9 +32,9 @@ type browseModel struct {
 
 func NewBrowseModel() browseModel {
 	items := []list.Item{
-		browseItem{title: "🔍 Search for anime", mode: BrowseModeSearch},
-		browseItem{title: "📈 Browse trending anime", mode: BrowseModeTrending},
-		browseItem{title: "⭐ Browse popular anime", mode: BrowseModePopular},
+		browseItem{title: "Search for anime", mode: BrowseModeSearch},
+		browseItem{title: "Browse recent anime", mode: BrowseModeTrending},
+		browseItem{title: "Browse anime catalog", mode: BrowseModePopular},
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
