@@ -1,6 +1,6 @@
 # Karu
 
-ani-cli clone written in Go
+_**ani-cli clone written in Go**_
 
 ## Installation
 
@@ -10,6 +10,22 @@ ani-cli clone written in Go
 git clone https://github.com/keircn/karu
 cd karu
 go build -o karu cmd/karu/main.go
+```
+
+### AUR
+
+```bash
+paru -Sy karu
+# or
+yay -Sy karu
+```
+
+We also have a -git package that syncs with the latest commit to the `main` branch
+
+```bash
+paru -Sy karu-git
+# or
+yay -Sy karu-git
 ```
 
 ## Usage
