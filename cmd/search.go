@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/keircn/karu/internal/player"
 	"github.com/keircn/karu/internal/scraper"
 	"github.com/keircn/karu/internal/ui"
+	"github.com/keircn/karu/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -16,74 +16,39 @@ var searchCmd = &cobra.Command{
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var query string
-		if len(args) == 0 {
-			var err error
-			query, err = ui.PromptForSearch()
-			if err != nil {
-				fmt.Printf("Error getting search query: %v\n", err)
-				return
-			}
-			if query == "" {
-				fmt.Println("No search query provided.")
-				return
-			}
-		} else {
+		if len(args) > 0 {
 			query = args[0]
 		}
 
-		animes, err := scraper.Search(query)
+		selection, err := workflow.GetAnimeSelection(query)
 		if err != nil {
-			fmt.Printf("Error searching for anime: %v\n", err)
+			fmt.Printf("Error: %v\n", err)
 			return
 		}
 
-		if len(animes) == 0 {
-			fmt.Println("No anime found.")
-			return
-		}
+		fmt.Printf("You chose: %s\n", selection.Anime.Title)
 
-		choice, err := ui.SelectAnime(animes)
+		episode, err := ui.SelectEpisode(selection.Episodes)
 		if err != nil {
-			fmt.Printf("Error selecting anime: %v\n", err)
+			fmt.Printf("Error selecting episode: %v\n", err)
 			return
 		}
 
-		if choice != nil {
-			fmt.Printf("You chose: %s\n", choice.Title)
-			showID := choice.URL[strings.LastIndex(choice.URL, "/")+1:]
-			episodes, err := scraper.GetEpisodes(showID)
+		if episode != nil {
+			fmt.Printf("You chose episode: %s\n", *episode)
+			videoURL, err := scraper.GetVideoURL(selection.ShowID, *episode)
 			if err != nil {
-				fmt.Printf("Error getting episodes: %v\n", err)
+				fmt.Printf("Error getting video URL: %v\n", err)
 				return
 			}
 
-			if len(episodes) == 0 {
-				fmt.Println("No episodes found for this anime.")
+			if videoURL == "" {
+				fmt.Println("No video URL found for this episode.")
 				return
 			}
 
-			episode, err := ui.SelectEpisode(episodes)
-			if err != nil {
-				fmt.Printf("Error selecting episode: %v\n", err)
-				return
-			}
-
-			if episode != nil {
-				fmt.Printf("You chose episode: %s\n", *episode)
-				videoURL, err := scraper.GetVideoURL(showID, *episode)
-				if err != nil {
-					fmt.Printf("Error getting video URL: %v\n", err)
-					return
-				}
-
-				if videoURL == "" {
-					fmt.Println("No video URL found for this episode.")
-					return
-				}
-
-				if err := player.Play(videoURL); err != nil {
-					fmt.Printf("Error playing video: %v\n", err)
-				}
+			if err := player.Play(videoURL); err != nil {
+				fmt.Printf("Error playing video: %v\n", err)
 			}
 		}
 	},

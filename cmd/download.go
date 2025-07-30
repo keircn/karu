@@ -2,14 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 
-	"github.com/keircn/karu/internal/config"
-	"github.com/keircn/karu/internal/scraper"
 	"github.com/keircn/karu/internal/ui"
+	"github.com/keircn/karu/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -32,203 +27,83 @@ Examples:
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var query string
-		if len(args) == 0 {
-			var err error
-			query, err = ui.PromptForSearch()
-			if err != nil {
-				fmt.Printf("Error getting search query: %v\n", err)
-				return
-			}
-			if query == "" {
-				fmt.Println("No search query provided.")
-				return
-			}
-		} else {
+		if len(args) > 0 {
 			query = args[0]
 		}
 
-		animes, err := scraper.Search(query)
+		selection, err := workflow.GetAnimeSelection(query)
 		if err != nil {
-			fmt.Printf("Error searching for anime: %v\n", err)
+			fmt.Printf("Error: %v\n", err)
 			return
 		}
 
-		if len(animes) == 0 {
-			fmt.Println("No anime found.")
-			return
-		}
+		fmt.Printf("You chose: %s\n", selection.Anime.Title)
 
-		choice, err := ui.SelectAnime(animes)
-		if err != nil {
-			fmt.Printf("Error selecting anime: %v\n", err)
-			return
-		}
-
-		if choice != nil {
-			fmt.Printf("You chose: %s\n", choice.Title)
-			showID := choice.URL[strings.LastIndex(choice.URL, "/")+1:]
-			episodes, err := scraper.GetEpisodes(showID)
+		if downloadAll {
+			fmt.Printf("Downloading all %d episodes of %s\n", len(selection.Episodes), selection.Anime.Title)
+			opts := workflow.DownloadOptions{All: true}
+			result, err := workflow.DownloadEpisodes(selection, opts)
 			if err != nil {
-				fmt.Printf("Error getting episodes: %v\n", err)
+				fmt.Printf("Error: %v\n", err)
+				return
+			}
+			workflow.PrintDownloadSummary(result)
+		} else if downloadRange != "" {
+			fmt.Printf("Downloading episodes %s of %s\n", downloadRange, selection.Anime.Title)
+			opts := workflow.DownloadOptions{Range: downloadRange}
+			result, err := workflow.DownloadEpisodes(selection, opts)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				return
+			}
+			workflow.PrintDownloadSummary(result)
+		} else {
+			episode, err := ui.SelectEpisode(selection.Episodes)
+			if err != nil {
+				fmt.Printf("Error selecting episode: %v\n", err)
 				return
 			}
 
-			if len(episodes) == 0 {
-				fmt.Println("No episodes found for this anime.")
-				return
-			}
-
-			cfg, err := config.Load()
-			if err != nil {
-				cfg = &config.DefaultConfig
-			}
-
-			var episodesToDownload []string
-
-			if downloadAll {
-				episodesToDownload = episodes
-				fmt.Printf("Downloading all %d episodes of %s\n", len(episodes), choice.Title)
-			} else if downloadRange != "" {
-				episodesToDownload, err = parseEpisodeRange(downloadRange, episodes)
+			if episode != nil {
+				opts := workflow.DownloadOptions{Range: *episode}
+				result, err := workflow.DownloadEpisodes(selection, opts)
 				if err != nil {
-					fmt.Printf("Error parsing episode range: %v\n", err)
+					fmt.Printf("Error: %v\n", err)
 					return
 				}
-				fmt.Printf("Downloading episodes %s of %s\n", downloadRange, choice.Title)
-			} else {
-				episode, err := ui.SelectEpisode(episodes)
-				if err != nil {
-					fmt.Printf("Error selecting episode: %v\n", err)
-					return
-				}
-				if episode != nil {
-					episodesToDownload = []string{*episode}
-				}
-			}
-
-			if len(episodesToDownload) == 0 {
-				return
-			}
-
-			failed := 0
-			for i, episode := range episodesToDownload {
-				if len(episodesToDownload) > 1 {
-					fmt.Printf("\n[%d/%d] Downloading episode: %s\n", i+1, len(episodesToDownload), episode)
-				} else {
-					fmt.Printf("Downloading episode: %s\n", episode)
-				}
-
-				filename := fmt.Sprintf("%s_episode_%s.mp4",
-					strings.ReplaceAll(choice.Title, " ", "_"), episode)
-				outputPath := filepath.Join(cfg.DownloadDir, filename)
-
-				if err := scraper.DownloadEpisodeWithProgress(showID, episode, outputPath); err != nil {
-					fmt.Printf("Error downloading episode %s: %v\n", episode, err)
-					failed++
-					continue
-				}
-			}
-
-			if len(episodesToDownload) > 1 {
-				fmt.Printf("\nDownload summary: %d/%d episodes downloaded successfully",
-					len(episodesToDownload)-failed, len(episodesToDownload))
-				if failed > 0 {
-					fmt.Printf(" (%d failed)", failed)
-				}
-				fmt.Println()
+				workflow.PrintDownloadSummary(result)
 			}
 		}
 	},
-}
-
-func parseEpisodeRange(rangeStr string, availableEpisodes []string) ([]string, error) {
-	if strings.Contains(rangeStr, "-") {
-		parts := strings.Split(rangeStr, "-")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid range format, use start-end (e.g., 1-5)")
-		}
-
-		start, err := strconv.Atoi(strings.TrimSpace(parts[0]))
-		if err != nil {
-			return nil, fmt.Errorf("invalid start episode number: %v", err)
-		}
-
-		end, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-		if err != nil {
-			return nil, fmt.Errorf("invalid end episode number: %v", err)
-		}
-
-		if start > end {
-			return nil, fmt.Errorf("start episode must be less than or equal to end episode")
-		}
-
-		var result []string
-		for _, ep := range availableEpisodes {
-			epNum, err := strconv.Atoi(ep)
-			if err != nil {
-				continue
-			}
-			if epNum >= start && epNum <= end {
-				result = append(result, ep)
-			}
-		}
-
-		if len(result) == 0 {
-			return nil, fmt.Errorf("no episodes found in range %d-%d", start, end)
-		}
-
-		return result, nil
-	}
-
-	episodes := strings.Split(rangeStr, ",")
-	var result []string
-	for _, ep := range episodes {
-		ep = strings.TrimSpace(ep)
-		for _, availableEp := range availableEpisodes {
-			if availableEp == ep {
-				result = append(result, ep)
-				break
-			}
-		}
-	}
-
-	if len(result) == 0 {
-		return nil, fmt.Errorf("no valid episodes found in list: %s", rangeStr)
-	}
-
-	return result, nil
 }
 
 var downloadListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List downloaded episodes",
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		fm, err := workflow.NewFileManager()
 		if err != nil {
-			cfg = &config.DefaultConfig
+			fmt.Printf("Error initializing file manager: %v\n", err)
+			return
 		}
 
-		files, err := filepath.Glob(filepath.Join(cfg.DownloadDir, "*.mp4"))
+		downloads, err := fm.ListDownloads()
 		if err != nil {
 			fmt.Printf("Error listing downloads: %v\n", err)
 			return
 		}
 
-		if len(files) == 0 {
+		if len(downloads) == 0 {
 			fmt.Println("No downloaded episodes found.")
 			return
 		}
 
 		fmt.Println("Downloaded episodes:")
-		for _, file := range files {
-			info, err := os.Stat(file)
-			if err != nil {
-				continue
-			}
+		for _, download := range downloads {
 			fmt.Printf("  %s (%.2f MB) - %s\n",
-				filepath.Base(file),
-				float64(info.Size())/(1024*1024),
-				info.ModTime().Format("2006-01-02 15:04"))
+				download.Name,
+				float64(download.Size)/(1024*1024),
+				download.Modified.Format("2006-01-02 15:04"))
 		}
 	},
 }
@@ -237,23 +112,24 @@ var downloadCleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Remove all downloaded episodes",
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		fm, err := workflow.NewFileManager()
 		if err != nil {
-			cfg = &config.DefaultConfig
+			fmt.Printf("Error initializing file manager: %v\n", err)
+			return
 		}
 
-		files, err := filepath.Glob(filepath.Join(cfg.DownloadDir, "*.mp4"))
+		downloads, err := fm.ListDownloads()
 		if err != nil {
 			fmt.Printf("Error listing downloads: %v\n", err)
 			return
 		}
 
-		if len(files) == 0 {
+		if len(downloads) == 0 {
 			fmt.Println("No downloaded episodes found.")
 			return
 		}
 
-		fmt.Printf("This will remove %d downloaded episodes. Continue? (y/N): ", len(files))
+		fmt.Printf("This will remove %d downloaded episodes. Continue? (y/N): ", len(downloads))
 		var response string
 		fmt.Scanln(&response)
 
@@ -262,11 +138,10 @@ var downloadCleanCmd = &cobra.Command{
 			return
 		}
 
-		removed := 0
-		for _, file := range files {
-			if err := os.Remove(file); err == nil {
-				removed++
-			}
+		removed, err := fm.CleanDownloads()
+		if err != nil {
+			fmt.Printf("Error cleaning downloads: %v\n", err)
+			return
 		}
 
 		fmt.Printf("Removed %d downloaded episodes.\n", removed)
