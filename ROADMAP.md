@@ -27,7 +27,7 @@
 ### Smaller UX stuff
 - [ ] Add concurrent episode loading for faster browsing
 - [ ] Implement caching for search results and episode lists
-- [ ] Add progress bars for downloads and loading
+- [x] Add progress bars for downloads and loading
 - [ ] Create update checker for new Karu versions
 
 ## Bug Fixes
