@@ -50,7 +50,7 @@ Karu automatically detects and uses available video players:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+Contributions are welcome! Please feel free to submit issues and pull requests. I also add planned features/improvements to [ROADMAP.md](./ROADMAP.md) so feel free to tackle some of those if you feel like helping out :)
 
 ## Disclaimer
 
