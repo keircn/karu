@@ -20,7 +20,7 @@
 ### Search
 - [ ] Add genre-based browsing and filtering
 - [ ] Implement advanced search with filters (year, status, rating)
-- [ ] Add "trending" or "popular" anime discovery
+- [x] Add "trending" or "popular" anime discovery
 - [ ] Create search history with quick access
 - [ ] Add fuzzy search improvements
 

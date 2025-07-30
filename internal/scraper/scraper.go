@@ -66,9 +66,62 @@ func buildSearchQuery(query string) GraphQLQuery {
 	}
 }
 
-func Search(query string) ([]Anime, error) {
+func buildTrendingQuery() GraphQLQuery {
+	return GraphQLQuery{
+		Query: `query($limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) {
+			shows(
+				limit: $limit
+				page: $page
+				translationType: $translationType
+				countryOrigin: $countryOrigin
+			) {
+				edges {
+					_id
+					name
+					availableEpisodes
+					__typename
+				}
+			}
+		}`,
+		Variables: map[string]any{
+			"limit":           20,
+			"page":            1,
+			"translationType": "sub",
+			"countryOrigin":   "JP",
+		},
+	}
+}
+
+func buildPopularQuery() GraphQLQuery {
+	return GraphQLQuery{
+		Query: `query($limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType, $sort: [VaildSortEnumType]) {
+			shows(
+				limit: $limit
+				page: $page
+				translationType: $translationType
+				countryOrigin: $countryOrigin
+				sort: $sort
+			) {
+				edges {
+					_id
+					name
+					availableEpisodes
+					__typename
+				}
+			}
+		}`,
+		Variables: map[string]any{
+			"limit":           20,
+			"page":            1,
+			"translationType": "sub",
+			"countryOrigin":   "JP",
+			"sort":            []string{"POPULAR"},
+		},
+	}
+}
+
+func executeQuery(gqlQuery GraphQLQuery) ([]Anime, error) {
 	var animes []Anime
-	gqlQuery := buildSearchQuery(query)
 	jsonData, err := json.Marshal(gqlQuery)
 	if err != nil {
 		return nil, err
@@ -104,6 +157,18 @@ func Search(query string) ([]Anime, error) {
 	}
 
 	return animes, nil
+}
+
+func Search(query string) ([]Anime, error) {
+	return executeQuery(buildSearchQuery(query))
+}
+
+func GetTrending() ([]Anime, error) {
+	return executeQuery(buildTrendingQuery())
+}
+
+func GetPopular() ([]Anime, error) {
+	return executeQuery(buildPopularQuery())
 }
 
 func DownloadEpisode(showID, episode, outputPath string) error {
