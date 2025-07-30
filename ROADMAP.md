@@ -12,8 +12,8 @@
 - [ ] Add subtitle selection and downloading
 
 ### Config
-- [ ] Add config file support for default player, quality preferences, download directory
-- [ ] Allow custom player commands and arguments
+- [x] Add config file support for default player, quality preferences, download directory
+- [x] Allow custom player commands and arguments
 - [ ] Add theme/color customization for the UI
 - [ ] Implement custom keybindings
 
