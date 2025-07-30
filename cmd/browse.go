@@ -13,7 +13,7 @@ import (
 var browseCmd = &cobra.Command{
 	Use:   "browse",
 	Short: "Browse anime by category",
-	Long:  `Interactive browsing interface for discovering anime by different categories.`,
+	Long:  `Interactive browsing interface for discovering anime by search, recent releases, or catalog.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		mode, err := ui.SelectBrowseMode()
 		if err != nil {
@@ -22,7 +22,7 @@ var browseCmd = &cobra.Command{
 		}
 
 		if mode == nil {
-			return // User cancelled
+			return
 		}
 
 		switch *mode {
@@ -106,22 +106,20 @@ func createSelectionFromAnime(choice *scraper.Anime) *workflow.AnimeSelection {
 	return &workflow.AnimeSelection{
 		Anime:    choice,
 		ShowID:   showID,
-		Episodes: nil, // Will be loaded when needed
+		Episodes: nil,
 	}
 }
 
 func extractShowID(url string) string {
-	// Extract show ID from URL: get everything after the last slash
 	for i := len(url) - 1; i >= 0; i-- {
 		if url[i] == '/' {
 			return url[i+1:]
 		}
 	}
-	return url // fallback
+	return url
 }
 
 func handleEpisodeSelection(selection *workflow.AnimeSelection) {
-	// Load episodes if not already loaded
 	if selection.Episodes == nil {
 		episodes, err := scraper.GetEpisodes(selection.ShowID)
 		if err != nil {

@@ -10,7 +10,7 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration settings",
-	Long:  `View and modify Karu configuration settings`,
+	Long:  `View and modify Karu configuration settings for player preferences and download directories.`,
 }
 
 var configGetCmd = &cobra.Command{

@@ -12,7 +12,8 @@ import (
 
 var searchCmd = &cobra.Command{
 	Use:   "search [query]",
-	Short: "Search for an anime",
+	Short: "Search for anime by title",
+	Long:  `Search for anime by title and interactively select episodes to watch.`,
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var query string

@@ -10,7 +10,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "karu",
 	Short: "A fast and pretty CLI for watching anime",
-	Long:  `Karu is a command-line interface to quickly find and watch anime.`,
+	Long:  `Karu is a command-line interface for discovering and watching anime with interactive browsing and seamless video playback.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},

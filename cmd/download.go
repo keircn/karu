@@ -16,15 +16,8 @@ var (
 var downloadCmd = &cobra.Command{
 	Use:   "download [query]",
 	Short: "Download anime episodes",
-	Long: `Download anime episodes with options for single episodes, ranges, or entire series.
-
-Examples:
-  karu download                        # Interactive single episode download
-  karu download "bocchi"               # Search and download single episode
-  karu download --all "bocchi"         # Download all episodes
-  karu download --range "1-5" "bocchi" # Download episodes 1-5
-  karu download --range "1,3,5" "bocchi" # Download specific episodes`,
-	Args: cobra.MaximumNArgs(1),
+	Long:  `Download anime episodes with options for single episodes, ranges, or entire series.`,
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var query string
 		if len(args) > 0 {
@@ -80,6 +73,7 @@ Examples:
 var downloadListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List downloaded episodes",
+	Long:  `List all downloaded episodes with file sizes and dates.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fm, err := workflow.NewFileManager()
 		if err != nil {
@@ -111,6 +105,7 @@ var downloadListCmd = &cobra.Command{
 var downloadCleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Remove all downloaded episodes",
+	Long:  `Remove all downloaded episodes from your download directory.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fm, err := workflow.NewFileManager()
 		if err != nil {
