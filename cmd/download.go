@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/keircn/karu/internal/config"
@@ -12,10 +13,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	downloadAll   bool
+	downloadRange string
+)
+
 var downloadCmd = &cobra.Command{
 	Use:   "download [query]",
 	Short: "Download anime episodes",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Download anime episodes with options for single episodes, ranges, or entire series.
+
+Examples:
+  karu download                        # Interactive single episode download
+  karu download "bocchi"               # Search and download single episode
+  karu download --all "bocchi"         # Download all episodes
+  karu download --range "1-5" "bocchi" # Download episodes 1-5
+  karu download --range "1,3,5" "bocchi" # Download specific episodes`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var query string
 		if len(args) == 0 {
@@ -64,31 +78,125 @@ var downloadCmd = &cobra.Command{
 				return
 			}
 
-			episode, err := ui.SelectEpisode(episodes)
+			cfg, err := config.Load()
 			if err != nil {
-				fmt.Printf("Error selecting episode: %v\n", err)
+				cfg = &config.DefaultConfig
+			}
+
+			var episodesToDownload []string
+
+			if downloadAll {
+				episodesToDownload = episodes
+				fmt.Printf("Downloading all %d episodes of %s\n", len(episodes), choice.Title)
+			} else if downloadRange != "" {
+				episodesToDownload, err = parseEpisodeRange(downloadRange, episodes)
+				if err != nil {
+					fmt.Printf("Error parsing episode range: %v\n", err)
+					return
+				}
+				fmt.Printf("Downloading episodes %s of %s\n", downloadRange, choice.Title)
+			} else {
+				episode, err := ui.SelectEpisode(episodes)
+				if err != nil {
+					fmt.Printf("Error selecting episode: %v\n", err)
+					return
+				}
+				if episode != nil {
+					episodesToDownload = []string{*episode}
+				}
+			}
+
+			if len(episodesToDownload) == 0 {
 				return
 			}
 
-			if episode != nil {
-				fmt.Printf("Downloading episode: %s\n", *episode)
-
-				cfg, err := config.Load()
-				if err != nil {
-					cfg = &config.DefaultConfig
+			failed := 0
+			for i, episode := range episodesToDownload {
+				if len(episodesToDownload) > 1 {
+					fmt.Printf("\n[%d/%d] Downloading episode: %s\n", i+1, len(episodesToDownload), episode)
+				} else {
+					fmt.Printf("Downloading episode: %s\n", episode)
 				}
 
 				filename := fmt.Sprintf("%s_episode_%s.mp4",
-					strings.ReplaceAll(choice.Title, " ", "_"), *episode)
+					strings.ReplaceAll(choice.Title, " ", "_"), episode)
 				outputPath := filepath.Join(cfg.DownloadDir, filename)
 
-				if err := scraper.DownloadEpisodeWithProgress(showID, *episode, outputPath); err != nil {
-					fmt.Printf("Error downloading episode: %v\n", err)
-					return
+				if err := scraper.DownloadEpisodeWithProgress(showID, episode, outputPath); err != nil {
+					fmt.Printf("Error downloading episode %s: %v\n", episode, err)
+					failed++
+					continue
 				}
+			}
+
+			if len(episodesToDownload) > 1 {
+				fmt.Printf("\nDownload summary: %d/%d episodes downloaded successfully",
+					len(episodesToDownload)-failed, len(episodesToDownload))
+				if failed > 0 {
+					fmt.Printf(" (%d failed)", failed)
+				}
+				fmt.Println()
 			}
 		}
 	},
+}
+
+func parseEpisodeRange(rangeStr string, availableEpisodes []string) ([]string, error) {
+	if strings.Contains(rangeStr, "-") {
+		parts := strings.Split(rangeStr, "-")
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid range format, use start-end (e.g., 1-5)")
+		}
+
+		start, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid start episode number: %v", err)
+		}
+
+		end, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid end episode number: %v", err)
+		}
+
+		if start > end {
+			return nil, fmt.Errorf("start episode must be less than or equal to end episode")
+		}
+
+		var result []string
+		for _, ep := range availableEpisodes {
+			epNum, err := strconv.Atoi(ep)
+			if err != nil {
+				continue
+			}
+			if epNum >= start && epNum <= end {
+				result = append(result, ep)
+			}
+		}
+
+		if len(result) == 0 {
+			return nil, fmt.Errorf("no episodes found in range %d-%d", start, end)
+		}
+
+		return result, nil
+	}
+
+	episodes := strings.Split(rangeStr, ",")
+	var result []string
+	for _, ep := range episodes {
+		ep = strings.TrimSpace(ep)
+		for _, availableEp := range availableEpisodes {
+			if availableEp == ep {
+				result = append(result, ep)
+				break
+			}
+		}
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no valid episodes found in list: %s", rangeStr)
+	}
+
+	return result, nil
 }
 
 var downloadListCmd = &cobra.Command{
@@ -166,6 +274,9 @@ var downloadCleanCmd = &cobra.Command{
 }
 
 func init() {
+	downloadCmd.Flags().BoolVarP(&downloadAll, "all", "a", false, "Download all episodes")
+	downloadCmd.Flags().StringVarP(&downloadRange, "range", "r", "", "Download episode range (e.g., 1-5 or 1,3,5)")
+
 	downloadCmd.AddCommand(downloadListCmd)
 	downloadCmd.AddCommand(downloadCleanCmd)
 	rootCmd.AddCommand(downloadCmd)
