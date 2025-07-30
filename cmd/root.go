@@ -12,7 +12,7 @@ var rootCmd = &cobra.Command{
 	Short: "A fast and pretty CLI for watching anime",
 	Long:  `Karu is a command-line interface to quickly find and watch anime.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// maybe one day
+		cmd.Help()
 	},
 }
 

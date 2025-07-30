@@ -13,9 +13,24 @@ import (
 var searchCmd = &cobra.Command{
 	Use:   "search [query]",
 	Short: "Search for an anime",
-	Args:  cobra.MinimumNArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		query := args[0]
+		var query string
+		if len(args) == 0 {
+			var err error
+			query, err = ui.PromptForSearch()
+			if err != nil {
+				fmt.Printf("Error getting search query: %v\n", err)
+				return
+			}
+			if query == "" {
+				fmt.Println("No search query provided.")
+				return
+			}
+		} else {
+			query = args[0]
+		}
+
 		animes, err := scraper.Search(query)
 		if err != nil {
 			fmt.Printf("Error searching for anime: %v\n", err)
