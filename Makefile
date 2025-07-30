@@ -43,18 +43,6 @@ fmt:
 	$(GOFMT) -w .
 	@echo "Code formatted"
 
-.PHONY: tidy
-tidy:
-	@echo "Tidying dependencies..."
-	$(GOMOD) tidy
-	@echo "Dependencies tidied"
-
-.PHONY: deps
-deps:
-	@echo "Downloading dependencies..."
-	$(GOMOD) download
-	@echo "Dependencies downloaded"
-
 .PHONY: install
 install: build
 	@cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/$(BINARY_NAME)
