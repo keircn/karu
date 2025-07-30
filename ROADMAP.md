@@ -3,7 +3,7 @@
 ## Features
 
 ### UX
-- [ ] Add download functionality to save episodes for offline viewing
+- [x] Add download functionality to save episodes for offline viewing
 - [ ] Implement watch history/resume feature to track progress
 - [ ] Add favorites/watchlist management
 - [ ] Create a recently watched menu for quick access

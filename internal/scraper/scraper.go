@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 const (
@@ -101,4 +104,42 @@ func Search(query string) ([]Anime, error) {
 	}
 
 	return animes, nil
+}
+
+func DownloadEpisode(showID, episode, outputPath string) error {
+	videoURL, err := GetVideoURL(showID, episode)
+	if err != nil {
+		return fmt.Errorf("failed to get video URL: %w", err)
+	}
+
+	if videoURL == "" {
+		return fmt.Errorf("no video URL found for episode %s", episode)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create download directory: %w", err)
+	}
+
+	resp, err := http.Get(videoURL)
+	if err != nil {
+		return fmt.Errorf("failed to download video: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download video: status %d", resp.StatusCode)
+	}
+
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write video data: %w", err)
+	}
+
+	return nil
 }
