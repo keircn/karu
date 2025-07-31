@@ -6,7 +6,7 @@
 - [x] Add download functionality to save episodes for offline viewing
 - [x] Implement watch history/resume feature to track progress
 - [ ] Add favorites/watchlist management
-- [ ] Create a recently watched menu for quick access
+- [x] Create a recently watched menu for quick access
 - [x] Add quality selection (720p, 1080p, etc.) when multiple sources available
 - [x] Implement auto-play next episode option
 - [x] Add video player controls with TUI interface
