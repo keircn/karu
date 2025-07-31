@@ -8,7 +8,7 @@
 - [ ] Add favorites/watchlist management
 - [ ] Create a recently watched menu for quick access
 - [x] Add quality selection (720p, 1080p, etc.) when multiple sources available
-- [ ] Implement auto-play next episode option
+- [x] Implement auto-play next episode option
 - [ ] Add subtitle selection and downloading
 
 ### Config

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/keircn/karu/internal/config"
 	"github.com/keircn/karu/internal/player"
 	"github.com/keircn/karu/internal/scraper"
 	"github.com/keircn/karu/internal/ui"
@@ -143,6 +144,9 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 
 	if episode != nil {
 		fmt.Printf("You chose episode: %s\n", *episode)
+
+		cfg, _ := config.Load()
+
 		videoURL, err := scraper.GetVideoURL(selection.ShowID, *episode)
 		if err != nil {
 			fmt.Printf("Error getting video URL: %v\n", err)
@@ -154,8 +158,27 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 			return
 		}
 
-		if err := player.Play(videoURL); err != nil {
-			fmt.Printf("Error playing video: %v\n", err)
+		if cfg.AutoPlayNext {
+			fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
+
+			playbackInfo := &player.PlaybackInfo{
+				ShowID:   selection.ShowID,
+				Episodes: selection.Episodes,
+				Current:  *episode,
+				VideoURL: videoURL,
+			}
+
+			getVideoURLFunc := func(showID, ep string) (string, error) {
+				return scraper.GetVideoURL(showID, ep)
+			}
+
+			if err := player.PlayWithAutoNext(playbackInfo, getVideoURLFunc); err != nil {
+				fmt.Printf("Error playing video: %v\n", err)
+			}
+		} else {
+			if err := player.Play(videoURL); err != nil {
+				fmt.Printf("Error playing video: %v\n", err)
+			}
 		}
 	}
 }

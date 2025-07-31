@@ -52,16 +52,36 @@ var searchCmd = &cobra.Command{
 
 			scraper.PreloadAdjacentEpisodes(selection.ShowID, selection.Episodes, *episode)
 
+			cfg, _ := config.Load()
+
 			if autoQuality {
-				cfg, _ := config.Load()
 				videoURL, err := scraper.GetVideoURLWithQuality(selection.ShowID, *episode, cfg.Quality)
 				if err != nil {
 					fmt.Printf("Error getting video URL: %v\n", err)
 					return
 				}
 
-				if err := player.Play(videoURL); err != nil {
-					fmt.Printf("Error playing video: %v\n", err)
+				if cfg.AutoPlayNext {
+					fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
+
+					playbackInfo := &player.PlaybackInfo{
+						ShowID:   selection.ShowID,
+						Episodes: selection.Episodes,
+						Current:  *episode,
+						VideoURL: videoURL,
+					}
+
+					getVideoURLFunc := func(showID, ep string) (string, error) {
+						return scraper.GetVideoURLWithQuality(showID, ep, cfg.Quality)
+					}
+
+					if err := player.PlayWithAutoNext(playbackInfo, getVideoURLFunc); err != nil {
+						fmt.Printf("Error playing video: %v\n", err)
+					}
+				} else {
+					if err := player.Play(videoURL); err != nil {
+						fmt.Printf("Error playing video: %v\n", err)
+					}
 				}
 				return
 			}
@@ -85,11 +105,49 @@ var searchCmd = &cobra.Command{
 
 			fmt.Printf("Selected quality: %s\n", selectedQuality.Quality)
 
-			if err := player.Play(selectedQuality.URL); err != nil {
-				fmt.Printf("Error playing video: %v\n", err)
+			if cfg.AutoPlayNext {
+				fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
+
+				playbackInfo := &player.PlaybackInfo{
+					ShowID:   selection.ShowID,
+					Episodes: selection.Episodes,
+					Current:  *episode,
+					VideoURL: selectedQuality.URL,
+				}
+
+				getVideoURLFunc := func(showID, ep string) (string, error) {
+					qualities, err := scraper.GetAvailableQualities(showID, ep)
+					if err != nil {
+						return "", err
+					}
+					for _, q := range qualities.Options {
+						if q.Quality == selectedQuality.Quality {
+							return q.URL, nil
+						}
+					}
+					if len(qualities.Options) > 0 {
+						return qualities.Options[0].URL, nil
+					}
+					return "", fmt.Errorf("no video URL found")
+				}
+
+				if err := player.PlayWithAutoNext(playbackInfo, getVideoURLFunc); err != nil {
+					fmt.Printf("Error playing video: %v\n", err)
+				}
+			} else {
+				if err := player.Play(selectedQuality.URL); err != nil {
+					fmt.Printf("Error playing video: %v\n", err)
+				}
 			}
 		}
 	},
+}
+
+func getAutoPlayStatus(enabled bool) string {
+	if enabled {
+		return "enabled"
+	}
+	return "disabled"
 }
 
 func init() {
