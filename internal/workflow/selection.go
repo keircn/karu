@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/keircn/karu/internal/config"
 	"github.com/keircn/karu/internal/scraper"
 	"github.com/keircn/karu/internal/ui"
 )
@@ -54,8 +55,54 @@ func GetAnimeSelection(query string) (*AnimeSelection, error) {
 		return nil, fmt.Errorf("no episodes found for this anime")
 	}
 
+	history, _ := config.LoadHistory()
+	if history != nil {
+		history.AddEntry(query, choice.Title, choice.URL, len(episodes))
+	}
+
 	return &AnimeSelection{
 		Anime:    choice,
+		ShowID:   showID,
+		Episodes: episodes,
+	}, nil
+}
+
+func GetAnimeSelectionFromHistory() (*AnimeSelection, error) {
+	option, err := ui.ShowHistoryOptions()
+	if err != nil {
+		return nil, fmt.Errorf("showing history options: %w", err)
+	}
+
+	if option == "New search" {
+		return GetAnimeSelection("")
+	}
+
+	entry, err := ui.SelectFromHistory(option)
+	if err != nil {
+		return nil, fmt.Errorf("selecting from history: %w", err)
+	}
+
+	if entry.Title == "" {
+		return GetAnimeSelection("")
+	}
+
+	showID := entry.URL[strings.LastIndex(entry.URL, "/")+1:]
+	episodes, err := scraper.GetEpisodes(showID)
+	if err != nil {
+		return nil, fmt.Errorf("getting episodes: %w", err)
+	}
+
+	if len(episodes) == 0 {
+		return nil, fmt.Errorf("no episodes found for this anime")
+	}
+
+	history, _ := config.LoadHistory()
+	if history != nil {
+		history.UpdateProgress(entry.Title, entry.LastWatched)
+	}
+
+	return &AnimeSelection{
+		Anime:    &scraper.Anime{Title: entry.Title, URL: entry.URL},
 		ShowID:   showID,
 		Episodes: episodes,
 	}, nil

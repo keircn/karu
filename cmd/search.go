@@ -23,8 +23,17 @@ var searchCmd = &cobra.Command{
 		}
 
 		autoQuality, _ := cmd.Flags().GetBool("auto-quality")
+		useHistory, _ := cmd.Flags().GetBool("history")
 
-		selection, err := workflow.GetAnimeSelection(query)
+		var selection *workflow.AnimeSelection
+		var err error
+
+		if useHistory {
+			selection, err = workflow.GetAnimeSelectionFromHistory()
+		} else {
+			selection, err = workflow.GetAnimeSelection(query)
+		}
+
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
@@ -86,4 +95,5 @@ var searchCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(searchCmd)
 	searchCmd.Flags().BoolP("auto-quality", "a", false, "Automatically select quality based on config")
+	searchCmd.Flags().BoolP("history", "H", false, "Browse search history instead of searching")
 }
