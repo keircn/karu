@@ -9,6 +9,8 @@
 - [ ] Create a recently watched menu for quick access
 - [x] Add quality selection (720p, 1080p, etc.) when multiple sources available
 - [x] Implement auto-play next episode option
+- [x] Add video player controls with TUI interface
+- [x] Add loading messages throughout the application
 - [ ] Add subtitle selection and downloading
 
 ### Config
@@ -28,6 +30,7 @@
 - [x] Add concurrent episode loading for faster browsing
 - [x] Implement caching for search results and episode lists
 - [x] Add progress bars for downloads and loading
+- [x] Hide video player logs for cleaner interface
 - [ ] Create update checker for new Karu versions
 
 ## Bug Fixes

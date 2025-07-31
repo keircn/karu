@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/keircn/karu/internal/config"
 )
 
@@ -15,6 +17,43 @@ type PlaybackInfo struct {
 	Current  string
 	VideoURL string
 }
+
+type model struct {
+	currentEpisode  int
+	episodes        []string
+	showID          string
+	getVideoURLFunc func(showID, episode string) (string, error)
+	initialVideoURL string
+	status          string
+	autoPlay        bool
+	showHelp        bool
+	quitting        bool
+	currentProcess  *exec.Cmd
+	program         *tea.Program
+}
+
+type playNextMsg struct{}
+type playPrevMsg struct{}
+
+var (
+	titleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("205")).
+			MarginBottom(1)
+
+	statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("86")).
+			MarginBottom(1)
+
+	helpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("244")).
+			MarginTop(1).
+			PaddingLeft(2)
+
+	episodeStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("86"))
+)
 
 func Play(videoURL string) error {
 	cfg, err := config.Load()
@@ -45,46 +84,205 @@ func PlayWithAutoNext(info *PlaybackInfo, getVideoURLFunc func(showID, episode s
 		return fmt.Errorf("current episode not found in episode list")
 	}
 
-	for i := currentIndex; i < len(info.Episodes); i++ {
-		episode := info.Episodes[i]
+	m := model{
+		currentEpisode:  currentIndex,
+		episodes:        info.Episodes,
+		showID:          info.ShowID,
+		getVideoURLFunc: getVideoURLFunc,
+		initialVideoURL: info.VideoURL,
+		status:          fmt.Sprintf("Playing episode %s", info.Episodes[currentIndex]),
+		autoPlay:        cfg.AutoPlayNext,
+		showHelp:        false,
+		quitting:        false,
+	}
 
-		var videoURL string
-		if i == currentIndex {
-			videoURL = info.VideoURL
-		} else {
-			var err error
-			videoURL, err = getVideoURLFunc(info.ShowID, episode)
-			if err != nil {
-				fmt.Printf("Error getting video URL for episode %s: %v\n", episode, err)
-				break
+	p := tea.NewProgram(&m)
+	m.program = p
+
+	go func() {
+		cmd, err := startVideoProcess(info.VideoURL, cfg)
+		if err != nil {
+			return
+		}
+		m.currentProcess = cmd
+
+		err = cmd.Wait()
+		if err != nil {
+			return
+		}
+
+		if m.autoPlay && m.currentEpisode < len(m.episodes)-1 && !m.quitting {
+			m.program.Send(playNextMsg{})
+		} else if !m.quitting {
+			m.program.Quit()
+		}
+	}()
+
+	_, err = p.Run()
+	return err
+}
+
+func (m *model) Init() tea.Cmd {
+	return nil
+}
+
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			m.killCurrentProcess()
+			m.quitting = true
+			return m, tea.Quit
+		case "n":
+			if m.currentEpisode < len(m.episodes)-1 {
+				return m, func() tea.Msg { return playNextMsg{} }
+			} else {
+				m.status = "Already at last episode"
 			}
+		case "p":
+			if m.currentEpisode > 0 {
+				return m, func() tea.Msg { return playPrevMsg{} }
+			} else {
+				m.status = "Already at first episode"
+			}
+		case "h", "?":
+			m.showHelp = !m.showHelp
 		}
 
-		fmt.Printf("Playing episode: %s\n", episode)
-		if cfg.AutoPlayNext && i > currentIndex {
-			fmt.Printf("Auto-playing next episode...\n")
+	case playNextMsg:
+		if m.currentEpisode < len(m.episodes)-1 {
+			m.killCurrentProcess()
+
+			m.currentEpisode++
+			episode := m.episodes[m.currentEpisode]
+			m.status = fmt.Sprintf("Loading episode %s...", episode)
+
+			go func() {
+				videoURL, err := m.getVideoURLFunc(m.showID, episode)
+				if err != nil {
+					m.status = fmt.Sprintf("Error loading episode: %v", err)
+					return
+				}
+
+				cfg, _ := config.Load()
+				cmd, err := startVideoProcess(videoURL, cfg)
+				if err != nil {
+					m.status = fmt.Sprintf("Error starting player: %v", err)
+					return
+				}
+				m.currentProcess = cmd
+				m.status = fmt.Sprintf("Playing episode %s", episode)
+
+				err = cmd.Wait()
+				if err != nil && !m.quitting {
+					m.status = fmt.Sprintf("Player error: %v", err)
+					return
+				}
+
+				if m.autoPlay && m.currentEpisode < len(m.episodes)-1 && !m.quitting {
+					m.program.Send(playNextMsg{})
+				} else if !m.quitting {
+					m.program.Quit()
+				}
+			}()
 		}
 
-		args := []string{videoURL}
-		if cfg.PlayerArgs != "" {
-			playerArgs := strings.Fields(cfg.PlayerArgs)
-			args = append(playerArgs, args...)
-		}
+	case playPrevMsg:
+		if m.currentEpisode > 0 {
+			m.killCurrentProcess()
 
-		cmd := exec.Command(cfg.Player, args...)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
+			m.currentEpisode--
+			episode := m.episodes[m.currentEpisode]
+			m.status = fmt.Sprintf("Loading episode %s...", episode)
 
-		if err := cmd.Run(); err != nil {
-			return err
-		}
+			go func() {
+				videoURL, err := m.getVideoURLFunc(m.showID, episode)
+				if err != nil {
+					m.status = fmt.Sprintf("Error loading episode: %v", err)
+					return
+				}
 
-		if !cfg.AutoPlayNext || i >= len(info.Episodes)-1 {
-			break
+				cfg, _ := config.Load()
+				cmd, err := startVideoProcess(videoURL, cfg)
+				if err != nil {
+					m.status = fmt.Sprintf("Error starting player: %v", err)
+					return
+				}
+				m.currentProcess = cmd
+				m.status = fmt.Sprintf("Playing episode %s", episode)
+
+				err = cmd.Wait()
+				if err != nil && !m.quitting {
+					m.status = fmt.Sprintf("Player error: %v", err)
+				}
+			}()
 		}
 	}
 
-	return nil
+	return m, nil
+}
+
+func (m *model) View() string {
+	if m.quitting {
+		return titleStyle.Render("Goodbye!")
+	}
+
+	title := titleStyle.Render("Karu Video Player")
+
+	currentEp := "None"
+	if m.currentEpisode < len(m.episodes) {
+		currentEp = m.episodes[m.currentEpisode]
+	}
+
+	episode := fmt.Sprintf("Episode: %s (%d/%d)",
+		episodeStyle.Render(currentEp),
+		m.currentEpisode+1,
+		len(m.episodes))
+
+	status := statusStyle.Render(m.status)
+
+	autoPlayStatus := "disabled"
+	if m.autoPlay {
+		autoPlayStatus = "enabled"
+	}
+
+	controls := fmt.Sprintf("Auto-play: %s", autoPlayStatus)
+
+	help := helpStyle.Render("Press 'h' for help")
+	if m.showHelp {
+		help = helpStyle.Render(`Controls:
+  q       - Quit Karu
+  n       - Next episode  
+  p       - Previous episode
+  h/?     - Toggle this help
+  ctrl+c  - Force quit`)
+	}
+
+	return fmt.Sprintf("%s\n\n%s\n%s\n%s\n%s\n",
+		title, episode, status, controls, help)
+}
+
+func (m *model) killCurrentProcess() {
+	if m.currentProcess != nil && m.currentProcess.Process != nil {
+		m.currentProcess.Process.Kill()
+		m.currentProcess = nil
+	}
+}
+
+func startVideoProcess(videoURL string, cfg *config.Config) (*exec.Cmd, error) {
+	args := []string{videoURL}
+	if cfg.PlayerArgs != "" {
+		playerArgs := strings.Fields(cfg.PlayerArgs)
+		args = append(playerArgs, args...)
+	}
+
+	cmd := exec.Command(cfg.Player, args...)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	err := cmd.Start()
+	return cmd, err
 }
 
 func findEpisodeIndex(episodes []string, target string) int {
