@@ -55,12 +55,14 @@ var searchCmd = &cobra.Command{
 			cfg, _ := config.Load()
 
 			if autoQuality {
+				fmt.Printf("Getting video source for episode %s...\n", *episode)
 				videoURL, err := scraper.GetVideoURLWithQuality(selection.ShowID, *episode, cfg.Quality)
 				if err != nil {
 					fmt.Printf("Error getting video URL: %v\n", err)
 					return
 				}
 
+				fmt.Printf("Video source found! Starting playback...\n")
 				if cfg.AutoPlayNext {
 					fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
 
@@ -72,6 +74,7 @@ var searchCmd = &cobra.Command{
 					}
 
 					getVideoURLFunc := func(showID, ep string) (string, error) {
+						fmt.Printf("Getting next episode source...\n")
 						return scraper.GetVideoURLWithQuality(showID, ep, cfg.Quality)
 					}
 
@@ -86,6 +89,7 @@ var searchCmd = &cobra.Command{
 				return
 			}
 
+			fmt.Printf("Loading available qualities for episode %s...\n", *episode)
 			qualities, err := scraper.GetAvailableQualities(selection.ShowID, *episode)
 			if err != nil {
 				fmt.Printf("Error getting video qualities: %v\n", err)
@@ -104,6 +108,7 @@ var searchCmd = &cobra.Command{
 			}
 
 			fmt.Printf("Selected quality: %s\n", selectedQuality.Quality)
+			fmt.Printf("Starting playback...\n")
 
 			if cfg.AutoPlayNext {
 				fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
@@ -116,6 +121,7 @@ var searchCmd = &cobra.Command{
 				}
 
 				getVideoURLFunc := func(showID, ep string) (string, error) {
+					fmt.Printf("Getting next episode source...\n")
 					qualities, err := scraper.GetAvailableQualities(showID, ep)
 					if err != nil {
 						return "", err

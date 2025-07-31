@@ -122,6 +122,7 @@ func extractShowID(url string) string {
 
 func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 	if selection.Episodes == nil {
+		fmt.Printf("Loading episodes for %s...\n", selection.Anime.Title)
 		episodes, err := scraper.GetEpisodes(selection.ShowID)
 		if err != nil {
 			fmt.Printf("Error getting episodes: %v\n", err)
@@ -147,6 +148,7 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 
 		cfg, _ := config.Load()
 
+		fmt.Printf("Getting video source for episode %s...\n", *episode)
 		videoURL, err := scraper.GetVideoURL(selection.ShowID, *episode)
 		if err != nil {
 			fmt.Printf("Error getting video URL: %v\n", err)
@@ -158,6 +160,7 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 			return
 		}
 
+		fmt.Printf("Video source found! Starting playback...\n")
 		if cfg.AutoPlayNext {
 			fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
 
@@ -169,6 +172,7 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 			}
 
 			getVideoURLFunc := func(showID, ep string) (string, error) {
+				fmt.Printf("Getting next episode source...\n")
 				return scraper.GetVideoURL(showID, ep)
 			}
 
@@ -182,7 +186,6 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 		}
 	}
 }
-
 func init() {
 	rootCmd.AddCommand(browseCmd)
 }

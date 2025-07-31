@@ -2,7 +2,6 @@ package player
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -30,8 +29,8 @@ func Play(videoURL string) error {
 	}
 
 	cmd := exec.Command(cfg.Player, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = nil
+	cmd.Stderr = nil
 	return cmd.Run()
 }
 
@@ -73,8 +72,8 @@ func PlayWithAutoNext(info *PlaybackInfo, getVideoURLFunc func(showID, episode s
 		}
 
 		cmd := exec.Command(cfg.Player, args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = nil
+		cmd.Stderr = nil
 
 		if err := cmd.Run(); err != nil {
 			return err

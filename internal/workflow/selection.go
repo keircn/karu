@@ -27,6 +27,7 @@ func GetAnimeSelection(query string) (*AnimeSelection, error) {
 		}
 	}
 
+	fmt.Printf("Searching for: %s...\n", query)
 	animes, err := scraper.Search(query)
 	if err != nil {
 		return nil, fmt.Errorf("searching for anime: %w", err)
@@ -46,6 +47,7 @@ func GetAnimeSelection(query string) (*AnimeSelection, error) {
 	}
 
 	showID := choice.URL[strings.LastIndex(choice.URL, "/")+1:]
+	fmt.Printf("Loading episodes for %s...\n", choice.Title)
 	episodes, err := scraper.GetEpisodes(showID)
 	if err != nil {
 		return nil, fmt.Errorf("getting episodes: %w", err)
@@ -87,6 +89,7 @@ func GetAnimeSelectionFromHistory() (*AnimeSelection, error) {
 	}
 
 	showID := entry.URL[strings.LastIndex(entry.URL, "/")+1:]
+	fmt.Printf("Loading episodes for %s...\n", entry.Title)
 	episodes, err := scraper.GetEpisodes(showID)
 	if err != nil {
 		return nil, fmt.Errorf("getting episodes: %w", err)
