@@ -7,7 +7,7 @@
 - [ ] Implement watch history/resume feature to track progress
 - [ ] Add favorites/watchlist management
 - [ ] Create a recently watched menu for quick access
-- [ ] Add quality selection (720p, 1080p, etc.) when multiple sources available
+- [x] Add quality selection (720p, 1080p, etc.) when multiple sources available
 - [ ] Implement auto-play next episode option
 - [ ] Add subtitle selection and downloading
 
