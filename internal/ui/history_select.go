@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/keircn/karu/internal/config"
+	"github.com/keircn/karu/pkg/ui"
 )
 
 type historyItem struct {
@@ -48,10 +49,9 @@ func NewHistoryModel(entries []config.HistoryEntry) HistoryModel {
 	l := list.New(items, list.NewDefaultDelegate(), 80, 20)
 	l.Title = "Search History"
 	l.SetShowStatusBar(true)
-	l.SetFilteringEnabled(true)
-	l.Styles.Title = titleStyle
-	l.Styles.PaginationStyle = paginationStyle
-	l.Styles.HelpStyle = helpStyle
+	l.Styles.Title = ui.TitleStyle
+	l.Styles.PaginationStyle = ui.PaginationStyle
+	l.Styles.HelpStyle = ui.HelpStyle
 
 	return HistoryModel{list: l}
 }
@@ -166,7 +166,7 @@ func (m HistoryOptionsModel) View() string {
 		s += fmt.Sprintf("%s %s\n", cursor, option)
 	}
 
-	s += "\n" + helpStyle.Render("j/k: move • enter: select • q: quit")
+	s += "\n" + ui.HelpStyle.Render("j/k: move • enter: select • q: quit")
 
 	return docStyle.Render(s)
 }

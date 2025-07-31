@@ -1,9 +1,10 @@
 package scraper
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
+	"context"
+
+	"github.com/keircn/karu/pkg/errors"
+	"github.com/keircn/karu/pkg/graphql"
 )
 
 type Stream struct {
@@ -30,62 +31,37 @@ type VideoResult struct {
 	} `json:"data"`
 }
 
-func buildVideoQuery(showID, episode string) GraphQLQuery {
-	return GraphQLQuery{
-		Query: `query ($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) {
-			episode(
-				showId: $showId
-				translationType: $translationType
-				episodeString: $episodeString
-			) {
-				episodeString
-				sourceUrls
-			}
-		}`,
-		Variables: map[string]any{
-			"showId":          showID,
-			"translationType": "sub",
-			"episodeString":   episode,
-		},
+const VideoQuery = `query ($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) {
+	episode(
+		showId: $showId
+		translationType: $translationType
+		episodeString: $episodeString
+	) {
+		episodeString
+		sourceUrls
 	}
-}
+}`
 
-func getVideoSourceURLs(showID, episode string) (*VideoResult, error) {
+func (c *Client) getVideoSourceURLs(ctx context.Context, showID, episode string) (*VideoResult, error) {
 	var videoResult VideoResult
 
 	err := executeWithFallback(func(baseURL string) error {
-		gqlQuery := buildVideoQuery(showID, episode)
-		jsonData, err := json.Marshal(gqlQuery)
-		if err != nil {
-			return err
-		}
+		qb := graphql.NewQueryBuilder(baseURL, c.httpClient).
+			SetQuery(VideoQuery).
+			AddVariable("showId", showID).
+			AddVariable("translationType", "sub").
+			AddVariable("episodeString", episode)
 
-		req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(jsonData))
-		if err != nil {
-			return err
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0")
-		req.Header.Set("Referer", "https://allanime.to")
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if err := json.NewDecoder(resp.Body).Decode(&videoResult); err != nil {
-			return err
-		}
-
-		return nil
+		return qb.Execute(ctx, &videoResult)
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, errors.ScrapingError, "failed to get video source URLs")
 	}
 
 	return &videoResult, nil
+}
+
+func getVideoSourceURLs(showID, episode string) (*VideoResult, error) {
+	return defaultClient.getVideoSourceURLs(context.Background(), showID, episode)
 }

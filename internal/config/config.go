@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+
+	"github.com/keircn/karu/pkg/errors"
+	"github.com/keircn/karu/pkg/validation"
 )
 
 type Config struct {
@@ -58,11 +61,11 @@ func getDefaultDownloadDir() string {
 func GetConfigPath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, errors.ConfigError, "failed to get user config directory")
 	}
 
 	karuConfigDir := filepath.Join(configDir, "karu")
-	if err := os.MkdirAll(karuConfigDir, 0755); err != nil {
+	if err := validation.EnsureDirectoryExists(karuConfigDir); err != nil {
 		return "", err
 	}
 
@@ -85,31 +88,74 @@ func Load() (*Config, error) {
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return &DefaultConfig, err
+		return &DefaultConfig, errors.Wrap(err, errors.ConfigError, "failed to read config file")
 	}
 
 	config := DefaultConfig
 	if err := json.Unmarshal(data, &config); err != nil {
+		return &DefaultConfig, errors.Wrap(err, errors.ConfigError, "failed to parse config file")
+	}
+
+	if err := config.validate(); err != nil {
 		return &DefaultConfig, err
 	}
 
-	if config.CacheTTL <= 0 {
-		config.CacheTTL = DefaultConfig.CacheTTL
-	}
-	if config.RequestTimeout <= 0 {
-		config.RequestTimeout = DefaultConfig.RequestTimeout
-	}
-	if config.ConcurrentWorkers <= 0 {
-		config.ConcurrentWorkers = DefaultConfig.ConcurrentWorkers
-	}
-	if config.PreloadEpisodes < 0 {
-		config.PreloadEpisodes = DefaultConfig.PreloadEpisodes
-	}
-
+	config.applyDefaults()
 	return &config, nil
 }
 
+func (c *Config) validate() error {
+	if err := validation.ValidateNonEmptyString(c.Player, "player"); err != nil {
+		return err
+	}
+
+	if err := validation.ValidateNonEmptyString(c.Quality, "quality"); err != nil {
+		return err
+	}
+
+	if err := validation.ValidateNonEmptyString(c.DownloadDir, "download_dir"); err != nil {
+		return err
+	}
+
+	if c.CacheTTL <= 0 {
+		return errors.New(errors.ValidationError, "cache_ttl_minutes must be positive")
+	}
+
+	if c.RequestTimeout <= 0 {
+		return errors.New(errors.ValidationError, "request_timeout_seconds must be positive")
+	}
+
+	if c.ConcurrentWorkers <= 0 {
+		return errors.New(errors.ValidationError, "concurrent_workers must be positive")
+	}
+
+	if c.PreloadEpisodes < 0 {
+		return errors.New(errors.ValidationError, "preload_episodes must be non-negative")
+	}
+
+	return nil
+}
+
+func (c *Config) applyDefaults() {
+	if c.CacheTTL <= 0 {
+		c.CacheTTL = DefaultConfig.CacheTTL
+	}
+	if c.RequestTimeout <= 0 {
+		c.RequestTimeout = DefaultConfig.RequestTimeout
+	}
+	if c.ConcurrentWorkers <= 0 {
+		c.ConcurrentWorkers = DefaultConfig.ConcurrentWorkers
+	}
+	if c.PreloadEpisodes < 0 {
+		c.PreloadEpisodes = DefaultConfig.PreloadEpisodes
+	}
+}
+
 func Save(config *Config) error {
+	if err := config.validate(); err != nil {
+		return err
+	}
+
 	configPath, err := GetConfigPath()
 	if err != nil {
 		return err
@@ -117,43 +163,80 @@ func Save(config *Config) error {
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return err
+		return errors.Wrap(err, errors.ConfigError, "failed to marshal config")
 	}
 
-	return os.WriteFile(configPath, data, 0644)
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return errors.Wrap(err, errors.ConfigError, "failed to write config file")
+	}
+
+	return nil
 }
 
 func (c *Config) Set(key, value string) error {
 	switch key {
 	case "player":
+		if err := validation.ValidateNonEmptyString(value, "player"); err != nil {
+			return err
+		}
 		c.Player = value
+
 	case "player_args":
 		c.PlayerArgs = value
+
 	case "quality":
+		if err := validation.ValidateNonEmptyString(value, "quality"); err != nil {
+			return err
+		}
 		c.Quality = value
+
 	case "download_dir":
+		if err := validation.ValidateNonEmptyString(value, "download_dir"); err != nil {
+			return err
+		}
 		c.DownloadDir = value
+
 	case "auto_play_next":
 		c.AutoPlayNext = value == "true"
+
 	case "show_subtitles":
 		c.ShowSubtitles = value == "true"
+
 	case "cache_ttl_minutes":
-		if ttl, err := strconv.Atoi(value); err == nil && ttl > 0 {
-			c.CacheTTL = ttl
+		ttl, err := validation.ValidatePositiveInt(value, "cache_ttl_minutes")
+		if err != nil {
+			return err
 		}
+		c.CacheTTL = ttl
+
 	case "request_timeout_seconds":
-		if timeout, err := strconv.Atoi(value); err == nil && timeout > 0 {
-			c.RequestTimeout = timeout
+		timeout, err := validation.ValidatePositiveInt(value, "request_timeout_seconds")
+		if err != nil {
+			return err
 		}
+		c.RequestTimeout = timeout
+
 	case "concurrent_workers":
-		if workers, err := strconv.Atoi(value); err == nil && workers > 0 {
-			c.ConcurrentWorkers = workers
+		workers, err := validation.ValidatePositiveInt(value, "concurrent_workers")
+		if err != nil {
+			return err
 		}
+		c.ConcurrentWorkers = workers
+
 	case "preload_episodes":
-		if episodes, err := strconv.Atoi(value); err == nil && episodes >= 0 {
-			c.PreloadEpisodes = episodes
+		episodes, err := strconv.Atoi(value)
+		if err != nil {
+			return errors.Wrapf(err, errors.ValidationError, "invalid preload_episodes: must be a number")
 		}
+		if episodes < 0 {
+			return errors.New(errors.ValidationError, "preload_episodes must be non-negative")
+		}
+		c.PreloadEpisodes = episodes
+
+	default:
+		return errors.New(errors.ValidationError, "unknown config key: "+key)
 	}
+
 	return Save(c)
 }
 

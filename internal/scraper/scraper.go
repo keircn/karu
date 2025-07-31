@@ -1,23 +1,16 @@
 package scraper
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
+	"time"
+
+	"github.com/keircn/karu/pkg/errors"
+	"github.com/keircn/karu/pkg/graphql"
+	"github.com/keircn/karu/pkg/http"
 )
 
-const (
-	apiURL = "https://api.allanime.day/api"
-)
-
-type GraphQLQuery struct {
-	Query     string         `json:"query"`
-	Variables map[string]any `json:"variables"`
-}
+const apiURL = "https://api.allanime.day/api"
 
 type SearchResult struct {
 	Data struct {
@@ -34,193 +27,123 @@ type SearchResult struct {
 	} `json:"data"`
 }
 
-func buildSearchQuery(query string) GraphQLQuery {
-	return GraphQLQuery{
-		Query: `query($search: SearchInput, $limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) {
-			shows(
-				search: $search
-				limit: $limit
-				page: $page
-				translationType: $translationType
-				countryOrigin: $countryOrigin
-			) {
-				edges {
-					_id
-					name
-					availableEpisodes
-					__typename
-				}
-			}
-		}`,
-		Variables: map[string]any{
-			"search": map[string]any{
-				"allowAdult":   false,
-				"allowUnknown": false,
-				"query":        query,
-			},
-			"limit":           40,
-			"page":            1,
-			"translationType": "sub",
-			"countryOrigin":   "ALL",
-		},
+type Client struct {
+	httpClient   *http.Client
+	queryBuilder *graphql.QueryBuilder
+}
+
+func NewClient() *Client {
+	httpClient := http.NewClient(
+		http.WithTimeout(10*time.Second),
+		http.WithUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0"),
+		http.WithReferer("https://allanime.to"),
+	)
+
+	queryBuilder := graphql.NewQueryBuilder(apiURL, httpClient)
+
+	return &Client{
+		httpClient:   httpClient,
+		queryBuilder: queryBuilder,
 	}
 }
 
-func buildTrendingQuery() GraphQLQuery {
-	return GraphQLQuery{
-		Query: `query($limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) {
-			shows(
-				limit: $limit
-				page: $page
-				translationType: $translationType
-				countryOrigin: $countryOrigin
-			) {
-				edges {
-					_id
-					name
-					availableEpisodes
-					__typename
-				}
-			}
-		}`,
-		Variables: map[string]any{
-			"limit":           20,
-			"page":            1,
-			"translationType": "sub",
-			"countryOrigin":   "JP",
-		},
-	}
-}
-
-func buildPopularQuery() GraphQLQuery {
-	return GraphQLQuery{
-		Query: `query($limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) {
-			shows(
-				limit: $limit
-				page: $page
-				translationType: $translationType
-				countryOrigin: $countryOrigin
-			) {
-				edges {
-					_id
-					name
-					availableEpisodes
-					__typename
-				}
-			}
-		}`,
-		Variables: map[string]any{
-			"limit":           20,
-			"page":            3,
-			"translationType": "sub",
-			"countryOrigin":   "JP",
-		},
-	}
-}
-
-func executeQuery(gqlQuery GraphQLQuery) ([]Anime, error) {
+func (c *Client) executeShowsQuery(ctx context.Context, qb *graphql.QueryBuilder) ([]Anime, error) {
 	initCaches()
 
-	cacheKey := generateCacheKey(gqlQuery.Query, gqlQuery.Variables)
+	query := qb.Build()
+	cacheKey := generateCacheKey(query.Query, query.Variables)
 
 	if cached, found := searchCache.Get(cacheKey); found {
 		return cached.([]Anime), nil
 	}
 
-	var animes []Anime
-
+	var result SearchResult
 	err := executeWithFallback(func(baseURL string) error {
-		jsonData, err := json.Marshal(gqlQuery)
-		if err != nil {
-			return err
+		qb := graphql.NewQueryBuilder(baseURL, c.httpClient).
+			SetQuery(query.Query)
+
+		for key, value := range query.Variables {
+			qb.AddVariable(key, value)
 		}
 
-		req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(jsonData))
-		if err != nil {
-			return err
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0")
-		req.Header.Set("Referer", "https://allanime.to")
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		var searchResult SearchResult
-		if err := json.NewDecoder(resp.Body).Decode(&searchResult); err != nil {
-			return err
-		}
-
-		animes = nil
-		for _, edge := range searchResult.Data.Shows.Edges {
-			animes = append(animes, Anime{
-				Title:    edge.Name,
-				URL:      fmt.Sprintf("https://allanime.to/anime/%s", edge.ID),
-				Episodes: fmt.Sprintf("%d", edge.AvailableEpisodes.Sub),
-			})
-		}
-
-		return nil
+		return qb.Execute(ctx, &result)
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, errors.ScrapingError, "failed to execute shows query")
+	}
+
+	animes := make([]Anime, 0, len(result.Data.Shows.Edges))
+	for _, edge := range result.Data.Shows.Edges {
+		animes = append(animes, Anime{
+			Title:    edge.Name,
+			URL:      fmt.Sprintf("https://allanime.to/anime/%s", edge.ID),
+			Episodes: fmt.Sprintf("%d", edge.AvailableEpisodes.Sub),
+		})
 	}
 
 	searchCache.Set(cacheKey, animes)
 	return animes, nil
 }
-func Search(query string) ([]Anime, error) {
-	return executeQuery(buildSearchQuery(query))
+
+func (c *Client) Search(ctx context.Context, query string) ([]Anime, error) {
+	qb := graphql.NewQueryBuilder(apiURL, c.httpClient).
+		SetQuery(graphql.ShowsQuery).
+		AddSearchInput(query, false, false).
+		AddPagination(40, 1).
+		AddTranslationType("sub").
+		AddCountryOrigin("ALL")
+
+	return c.executeShowsQuery(ctx, qb)
 }
 
-func GetTrending() ([]Anime, error) {
-	return executeQuery(buildTrendingQuery())
+func (c *Client) GetTrending(ctx context.Context) ([]Anime, error) {
+	qb := graphql.NewQueryBuilder(apiURL, c.httpClient).
+		SetQuery(graphql.ShowsQuery).
+		AddPagination(20, 1).
+		AddTranslationType("sub").
+		AddCountryOrigin("JP")
+
+	return c.executeShowsQuery(ctx, qb)
 }
 
-func GetPopular() ([]Anime, error) {
-	return executeQuery(buildPopularQuery())
+func (c *Client) GetPopular(ctx context.Context) ([]Anime, error) {
+	qb := graphql.NewQueryBuilder(apiURL, c.httpClient).
+		SetQuery(graphql.ShowsQuery).
+		AddPagination(20, 3).
+		AddTranslationType("sub").
+		AddCountryOrigin("JP")
+
+	return c.executeShowsQuery(ctx, qb)
 }
 
-func DownloadEpisode(showID, episode, outputPath string) error {
+func (c *Client) DownloadEpisode(ctx context.Context, showID, episode, outputPath string) error {
 	videoURL, err := GetVideoURL(showID, episode)
 	if err != nil {
-		return fmt.Errorf("failed to get video URL: %w", err)
+		return errors.Wrapf(err, errors.ScrapingError, "failed to get video URL for episode %s", episode)
 	}
 
 	if videoURL == "" {
-		return fmt.Errorf("no video URL found for episode %s", episode)
+		return errors.New(errors.ScrapingError, fmt.Sprintf("no video URL found for episode %s", episode))
 	}
 
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
-		return fmt.Errorf("failed to create download directory: %w", err)
-	}
+	return c.httpClient.DownloadFile(ctx, videoURL, outputPath)
+}
 
-	resp, err := http.Get(videoURL)
-	if err != nil {
-		return fmt.Errorf("failed to download video: %w", err)
-	}
-	defer resp.Body.Close()
+var defaultClient = NewClient()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download video: status %d", resp.StatusCode)
-	}
+func Search(query string) ([]Anime, error) {
+	return defaultClient.Search(context.Background(), query)
+}
 
-	out, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer out.Close()
+func GetTrending() ([]Anime, error) {
+	return defaultClient.GetTrending(context.Background())
+}
 
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to write video data: %w", err)
-	}
+func GetPopular() ([]Anime, error) {
+	return defaultClient.GetPopular(context.Background())
+}
 
-	return nil
+func DownloadEpisode(showID, episode, outputPath string) error {
+	return defaultClient.DownloadEpisode(context.Background(), showID, episode, outputPath)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/keircn/karu/internal/config"
+	"github.com/keircn/karu/pkg/ui"
 )
 
 type episodeItem struct {
@@ -31,10 +32,10 @@ func (i episodeItem) Description() string {
 
 func (i episodeItem) FilterValue() string { return i.title }
 
+func (i episodeItem) GetValue() interface{} { return i.title }
+
 type episodeModel struct {
-	list      list.Model
-	choice    *string
-	quitting  bool
+	ui.ListModel
 	showTitle string
 	hasResume bool
 	resumeEp  int
@@ -60,83 +61,50 @@ func NewEpisodeModel(episodes []string, showTitle string) episodeModel {
 			}
 		}
 
-		items[i] = list.Item(episodeItem{
+		items[i] = episodeItem{
 			title:      ep,
 			watched:    watched,
 			episodeNum: episodeNum,
-		})
+		}
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "Select an episode"
-	l.Styles.Title = titleStyle
-	l.Styles.PaginationStyle = paginationStyle
-	l.Styles.HelpStyle = helpStyle
+	baseModel := ui.NewListModel(items, "Select an episode")
 
 	return episodeModel{
-		list:      l,
+		ListModel: baseModel,
 		showTitle: showTitle,
 		hasResume: hasResume,
 		resumeEp:  resumeEp,
 	}
 }
 
-func (m episodeModel) Init() tea.Cmd {
-	return nil
-}
-
 func (m episodeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		h, v := appStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
-
 	case tea.KeyMsg:
-		if m.list.FilterState() == list.Filtering {
-			break
-		}
-
 		switch keypress := msg.String(); keypress {
-		case "ctrl+c", "q":
-			m.quitting = true
-			return m, tea.Quit
-
 		case "r":
 			if m.hasResume {
-				resumeEpisode := fmt.Sprintf("%d", m.resumeEp)
-				m.choice = &resumeEpisode
 				return m, tea.Quit
 			}
-
-		case "enter":
-			i, ok := m.list.SelectedItem().(episodeItem)
-			if ok {
-				m.choice = &i.title
-			}
-			return m, tea.Quit
 		}
 	}
 
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	baseModel, cmd := m.ListModel.Update(msg)
+	m.ListModel = baseModel.(ui.ListModel)
 	return m, cmd
 }
 
 func (m episodeModel) View() string {
-	if m.choice != nil {
+	baseView := m.ListModel.View()
+	if baseView == "" {
 		return ""
 	}
-	if m.quitting {
-		return ""
-	}
-
-	view := appStyle.Render(m.list.View())
 
 	if m.hasResume {
-		view += fmt.Sprintf("\n\nPress 'r' to resume from episode %d", m.resumeEp)
+		baseView += fmt.Sprintf("\n\nPress 'r' to resume from episode %d", m.resumeEp)
 	}
 
-	return view
+	return baseView
 }
 
 func SelectEpisode(episodes []string, showTitle string) (*string, error) {
@@ -152,5 +120,11 @@ func SelectEpisode(episodes []string, showTitle string) (*string, error) {
 		return nil, err
 	}
 
-	return finalModel.(episodeModel).choice, nil
+	result := finalModel.(episodeModel).GetChoice()
+	if result == nil {
+		return nil, nil
+	}
+
+	episode := result.(string)
+	return &episode, nil
 }
