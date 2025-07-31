@@ -41,7 +41,7 @@ var searchCmd = &cobra.Command{
 
 		fmt.Printf("You chose: %s\n", selection.Anime.Title)
 
-		episode, err := ui.SelectEpisode(selection.Episodes)
+		episode, err := ui.SelectEpisode(selection.Episodes, selection.Anime.Title)
 		if err != nil {
 			fmt.Printf("Error selecting episode: %v\n", err)
 			return
@@ -67,10 +67,11 @@ var searchCmd = &cobra.Command{
 					fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
 
 					playbackInfo := &player.PlaybackInfo{
-						ShowID:   selection.ShowID,
-						Episodes: selection.Episodes,
-						Current:  *episode,
-						VideoURL: videoURL,
+						ShowID:    selection.ShowID,
+						ShowTitle: selection.Anime.Title,
+						Episodes:  selection.Episodes,
+						Current:   *episode,
+						VideoURL:  videoURL,
 					}
 
 					getVideoURLFunc := func(showID, ep string) (string, error) {
@@ -114,10 +115,11 @@ var searchCmd = &cobra.Command{
 				fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
 
 				playbackInfo := &player.PlaybackInfo{
-					ShowID:   selection.ShowID,
-					Episodes: selection.Episodes,
-					Current:  *episode,
-					VideoURL: selectedQuality.URL,
+					ShowID:    selection.ShowID,
+					ShowTitle: selection.Anime.Title,
+					Episodes:  selection.Episodes,
+					Current:   *episode,
+					VideoURL:  selectedQuality.URL,
 				}
 
 				getVideoURLFunc := func(showID, ep string) (string, error) {

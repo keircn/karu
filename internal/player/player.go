@@ -12,16 +12,18 @@ import (
 )
 
 type PlaybackInfo struct {
-	ShowID   string
-	Episodes []string
-	Current  string
-	VideoURL string
+	ShowID    string
+	ShowTitle string
+	Episodes  []string
+	Current   string
+	VideoURL  string
 }
 
 type model struct {
 	currentEpisode  int
 	episodes        []string
 	showID          string
+	showTitle       string
 	getVideoURLFunc func(showID, episode string) (string, error)
 	initialVideoURL string
 	status          string
@@ -88,6 +90,7 @@ func PlayWithAutoNext(info *PlaybackInfo, getVideoURLFunc func(showID, episode s
 		currentEpisode:  currentIndex,
 		episodes:        info.Episodes,
 		showID:          info.ShowID,
+		showTitle:       info.ShowTitle,
 		getVideoURLFunc: getVideoURLFunc,
 		initialVideoURL: info.VideoURL,
 		status:          fmt.Sprintf("Playing episode %s", info.Episodes[currentIndex]),
@@ -111,13 +114,14 @@ func PlayWithAutoNext(info *PlaybackInfo, getVideoURLFunc func(showID, episode s
 			return
 		}
 
+		m.updateWatchHistory()
+
 		if m.autoPlay && m.currentEpisode < len(m.episodes)-1 && !m.quitting {
 			m.program.Send(playNextMsg{})
 		} else if !m.quitting {
 			m.program.Quit()
 		}
 	}()
-
 	_, err = p.Run()
 	return err
 }
@@ -180,6 +184,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return
 				}
 
+				m.updateWatchHistory()
+
 				if m.autoPlay && m.currentEpisode < len(m.episodes)-1 && !m.quitting {
 					m.program.Send(playNextMsg{})
 				} else if !m.quitting {
@@ -216,11 +222,27 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil && !m.quitting {
 					m.status = fmt.Sprintf("Player error: %v", err)
 				}
+
+				m.updateWatchHistory()
 			}()
 		}
 	}
 
 	return m, nil
+}
+
+func (m *model) updateWatchHistory() {
+	if m.showTitle == "" {
+		return
+	}
+
+	history, err := config.LoadHistory()
+	if err != nil {
+		return
+	}
+
+	episodeNum := m.currentEpisode + 1
+	history.UpdateProgress(m.showTitle, episodeNum)
 }
 
 func (m *model) View() string {
@@ -247,6 +269,18 @@ func (m *model) View() string {
 		autoPlayStatus = "enabled"
 	}
 
+	progress := ""
+	if m.showTitle != "" {
+		history, err := config.LoadHistory()
+		if err == nil {
+			if lastWatched, exists := history.GetProgress(m.showTitle); exists {
+				completion := history.GetCompletionPercentage(m.showTitle)
+				progress = fmt.Sprintf("Progress: %d/%d episodes (%.1f%% complete)",
+					lastWatched, len(m.episodes), completion)
+			}
+		}
+	}
+
 	controls := fmt.Sprintf("Auto-play: %s", autoPlayStatus)
 
 	help := helpStyle.Render("Press 'h' for help")
@@ -257,6 +291,11 @@ func (m *model) View() string {
   p       - Previous episode
   h/?     - Toggle this help
   ctrl+c  - Force quit`)
+	}
+
+	if progress != "" {
+		return fmt.Sprintf("%s\n\n%s\n%s\n%s\n%s\n%s\n",
+			title, episode, status, progress, controls, help)
 	}
 
 	return fmt.Sprintf("%s\n\n%s\n%s\n%s\n%s\n",

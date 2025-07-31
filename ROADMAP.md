@@ -4,7 +4,7 @@
 
 ### UX
 - [x] Add download functionality to save episodes for offline viewing
-- [ ] Implement watch history/resume feature to track progress
+- [x] Implement watch history/resume feature to track progress
 - [ ] Add favorites/watchlist management
 - [ ] Create a recently watched menu for quick access
 - [x] Add quality selection (720p, 1080p, etc.) when multiple sources available

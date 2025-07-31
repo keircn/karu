@@ -129,13 +129,54 @@ func (h *History) AddEntry(query, title, url string, totalEps int) error {
 func (h *History) UpdateProgress(title string, episode int) error {
 	for i, entry := range h.Entries {
 		if entry.Title == title {
-			h.Entries[i].LastWatched = episode
+			if episode > h.Entries[i].LastWatched {
+				h.Entries[i].LastWatched = episode
+			}
 			h.Entries[i].Timestamp = time.Now()
 			h.Entries[i].AccessCount++
 			return SaveHistory(h)
 		}
 	}
 	return nil
+}
+
+func (h *History) GetProgress(title string) (int, bool) {
+	for _, entry := range h.Entries {
+		if entry.Title == title {
+			return entry.LastWatched, true
+		}
+	}
+	return 0, false
+}
+
+func (h *History) IsWatched(title string, episode int) bool {
+	for _, entry := range h.Entries {
+		if entry.Title == title {
+			return episode <= entry.LastWatched
+		}
+	}
+	return false
+}
+
+func (h *History) GetNextEpisode(title string) int {
+	for _, entry := range h.Entries {
+		if entry.Title == title {
+			if entry.LastWatched < entry.TotalEps {
+				return entry.LastWatched + 1
+			}
+			return entry.LastWatched
+		}
+	}
+	return 1
+}
+
+func (h *History) GetCompletionPercentage(title string) float64 {
+	for _, entry := range h.Entries {
+		if entry.Title == title && entry.TotalEps > 0 {
+			return float64(entry.LastWatched) / float64(entry.TotalEps) * 100
+		}
+	}
+	return 0
 }
 
 func (h *History) RemoveEntry(title string) error {

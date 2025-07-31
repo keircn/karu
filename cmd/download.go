@@ -51,7 +51,7 @@ var downloadCmd = &cobra.Command{
 			}
 			workflow.PrintDownloadSummary(result)
 		} else {
-			episode, err := ui.SelectEpisode(selection.Episodes)
+			episode, err := ui.SelectEpisode(selection.Episodes, selection.Anime.Title)
 			if err != nil {
 				fmt.Printf("Error selecting episode: %v\n", err)
 				return

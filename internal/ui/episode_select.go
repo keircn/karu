@@ -1,30 +1,70 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbletea"
+	"github.com/keircn/karu/internal/config"
 )
 
 type episodeItem struct {
-	title string
+	title      string
+	watched    bool
+	episodeNum int
 }
 
-func (i episodeItem) Title() string       { return i.title }
-func (i episodeItem) Description() string { return "" }
+func (i episodeItem) Title() string {
+	if i.watched {
+		return fmt.Sprintf("✓ %s", i.title)
+	}
+	return i.title
+}
+
+func (i episodeItem) Description() string {
+	if i.watched {
+		return "Watched"
+	}
+	return ""
+}
+
 func (i episodeItem) FilterValue() string { return i.title }
 
 type episodeModel struct {
-	list     list.Model
-	choice   *string
-	quitting bool
+	list      list.Model
+	choice    *string
+	quitting  bool
+	showTitle string
+	hasResume bool
+	resumeEp  int
 }
 
-func NewEpisodeModel(episodes []string) episodeModel {
+func NewEpisodeModel(episodes []string, showTitle string) episodeModel {
+	history, _ := config.LoadHistory()
+
 	items := make([]list.Item, len(episodes))
+	var hasResume bool
+	var resumeEp int
+
 	for i, ep := range episodes {
-		items[i] = list.Item(episodeItem{title: ep})
+		episodeNum := len(episodes) - i
+		watched := history.IsWatched(showTitle, episodeNum)
+
+		if !hasResume {
+			if lastWatched, exists := history.GetProgress(showTitle); exists {
+				if episodeNum == lastWatched+1 {
+					hasResume = true
+					resumeEp = episodeNum
+				}
+			}
+		}
+
+		items[i] = list.Item(episodeItem{
+			title:      ep,
+			watched:    watched,
+			episodeNum: episodeNum,
+		})
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
@@ -33,7 +73,12 @@ func NewEpisodeModel(episodes []string) episodeModel {
 	l.Styles.PaginationStyle = paginationStyle
 	l.Styles.HelpStyle = helpStyle
 
-	return episodeModel{list: l}
+	return episodeModel{
+		list:      l,
+		showTitle: showTitle,
+		hasResume: hasResume,
+		resumeEp:  resumeEp,
+	}
 }
 
 func (m episodeModel) Init() tea.Cmd {
@@ -56,6 +101,13 @@ func (m episodeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
+		case "r":
+			if m.hasResume {
+				resumeEpisode := fmt.Sprintf("%d", m.resumeEp)
+				m.choice = &resumeEpisode
+				return m, tea.Quit
+			}
+
 		case "enter":
 			i, ok := m.list.SelectedItem().(episodeItem)
 			if ok {
@@ -77,15 +129,22 @@ func (m episodeModel) View() string {
 	if m.quitting {
 		return ""
 	}
-	return appStyle.Render(m.list.View())
+
+	view := appStyle.Render(m.list.View())
+
+	if m.hasResume {
+		view += fmt.Sprintf("\n\nPress 'r' to resume from episode %d", m.resumeEp)
+	}
+
+	return view
 }
 
-func SelectEpisode(episodes []string) (*string, error) {
+func SelectEpisode(episodes []string, showTitle string) (*string, error) {
 	for i, j := 0, len(episodes)-1; i < j; i, j = i+1, j-1 {
 		episodes[i], episodes[j] = episodes[j], episodes[i]
 	}
 
-	m := NewEpisodeModel(episodes)
+	m := NewEpisodeModel(episodes, showTitle)
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 
 	finalModel, err := p.Run()

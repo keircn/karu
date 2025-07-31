@@ -23,7 +23,7 @@ var historyCmd = &cobra.Command{
 
 		fmt.Printf("You chose: %s\n", selection.Anime.Title)
 
-		episode, err := ui.SelectEpisode(selection.Episodes)
+		episode, err := ui.SelectEpisode(selection.Episodes, selection.Anime.Title)
 		if err != nil {
 			fmt.Printf("Error selecting episode: %v\n", err)
 			return

@@ -137,7 +137,7 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 		selection.Episodes = episodes
 	}
 
-	episode, err := ui.SelectEpisode(selection.Episodes)
+	episode, err := ui.SelectEpisode(selection.Episodes, selection.Anime.Title)
 	if err != nil {
 		fmt.Printf("Error selecting episode: %v\n", err)
 		return
@@ -165,10 +165,11 @@ func handleEpisodeSelection(selection *workflow.AnimeSelection) {
 			fmt.Printf("Auto-play next episode: %s\n", getAutoPlayStatus(cfg.AutoPlayNext))
 
 			playbackInfo := &player.PlaybackInfo{
-				ShowID:   selection.ShowID,
-				Episodes: selection.Episodes,
-				Current:  *episode,
-				VideoURL: videoURL,
+				ShowID:    selection.ShowID,
+				ShowTitle: selection.Anime.Title,
+				Episodes:  selection.Episodes,
+				Current:   *episode,
+				VideoURL:  videoURL,
 			}
 
 			getVideoURLFunc := func(showID, ep string) (string, error) {
