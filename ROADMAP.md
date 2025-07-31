@@ -25,8 +25,8 @@
 - [ ] Add fuzzy search improvements
 
 ### Smaller UX stuff
-- [ ] Add concurrent episode loading for faster browsing
-- [ ] Implement caching for search results and episode lists
+- [x] Add concurrent episode loading for faster browsing
+- [x] Implement caching for search results and episode lists
 - [x] Add progress bars for downloads and loading
 - [ ] Create update checker for new Karu versions
 
