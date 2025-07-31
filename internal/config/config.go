@@ -5,24 +5,29 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 )
 
 type Config struct {
-	Player        string `json:"player"`
-	PlayerArgs    string `json:"player_args"`
-	Quality       string `json:"quality"`
-	DownloadDir   string `json:"download_dir"`
-	AutoPlayNext  bool   `json:"auto_play_next"`
-	ShowSubtitles bool   `json:"show_subtitles"`
+	Player         string `json:"player"`
+	PlayerArgs     string `json:"player_args"`
+	Quality        string `json:"quality"`
+	DownloadDir    string `json:"download_dir"`
+	AutoPlayNext   bool   `json:"auto_play_next"`
+	ShowSubtitles  bool   `json:"show_subtitles"`
+	CacheTTL       int    `json:"cache_ttl_minutes"`
+	RequestTimeout int    `json:"request_timeout_seconds"`
 }
 
 var DefaultConfig = Config{
-	Player:        getDefaultPlayer(),
-	PlayerArgs:    "",
-	Quality:       "1080p",
-	DownloadDir:   getDefaultDownloadDir(),
-	AutoPlayNext:  false,
-	ShowSubtitles: true,
+	Player:         getDefaultPlayer(),
+	PlayerArgs:     "",
+	Quality:        "1080p",
+	DownloadDir:    getDefaultDownloadDir(),
+	AutoPlayNext:   false,
+	ShowSubtitles:  true,
+	CacheTTL:       15,
+	RequestTimeout: 10,
 }
 
 func getDefaultPlayer() string {
@@ -79,9 +84,16 @@ func Load() (*Config, error) {
 		return &DefaultConfig, err
 	}
 
-	var config Config
+	config := DefaultConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return &DefaultConfig, err
+	}
+
+	if config.CacheTTL <= 0 {
+		config.CacheTTL = DefaultConfig.CacheTTL
+	}
+	if config.RequestTimeout <= 0 {
+		config.RequestTimeout = DefaultConfig.RequestTimeout
 	}
 
 	return &config, nil
@@ -115,6 +127,14 @@ func (c *Config) Set(key, value string) error {
 		c.AutoPlayNext = value == "true"
 	case "show_subtitles":
 		c.ShowSubtitles = value == "true"
+	case "cache_ttl_minutes":
+		if ttl, err := strconv.Atoi(value); err == nil && ttl > 0 {
+			c.CacheTTL = ttl
+		}
+	case "request_timeout_seconds":
+		if timeout, err := strconv.Atoi(value); err == nil && timeout > 0 {
+			c.RequestTimeout = timeout
+		}
 	}
 	return Save(c)
 }
@@ -139,6 +159,10 @@ func (c *Config) Get(key string) string {
 			return "true"
 		}
 		return "false"
+	case "cache_ttl_minutes":
+		return strconv.Itoa(c.CacheTTL)
+	case "request_timeout_seconds":
+		return strconv.Itoa(c.RequestTimeout)
 	default:
 		return ""
 	}

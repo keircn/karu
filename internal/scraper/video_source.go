@@ -51,30 +51,39 @@ func buildVideoQuery(showID, episode string) GraphQLQuery {
 }
 
 func getVideoSourceURLs(showID, episode string) (*VideoResult, error) {
-	gqlQuery := buildVideoQuery(showID, episode)
-	jsonData, err := json.Marshal(gqlQuery)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0")
-	req.Header.Set("Referer", "https://allanime.to")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var videoResult VideoResult
-	if err := json.NewDecoder(resp.Body).Decode(&videoResult); err != nil {
+
+	err := executeWithFallback(func(baseURL string) error {
+		gqlQuery := buildVideoQuery(showID, episode)
+		jsonData, err := json.Marshal(gqlQuery)
+		if err != nil {
+			return err
+		}
+
+		req, err := http.NewRequest("POST", baseURL, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0")
+		req.Header.Set("Referer", "https://allanime.to")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if err := json.NewDecoder(resp.Body).Decode(&videoResult); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return nil, err
 	}
 

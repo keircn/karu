@@ -1,12 +1,16 @@
 package scraper
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/keircn/karu/internal/config"
 )
 
 type clockResponse struct {
@@ -18,7 +22,16 @@ type clockResponse struct {
 }
 
 func fetchClockURL(clockURL string) (string, error) {
-	req, err := http.NewRequest("GET", clockURL, nil)
+	cfg, _ := config.Load()
+	timeout := time.Duration(cfg.RequestTimeout) * time.Second
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", clockURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +72,16 @@ func fetchClockURL(clockURL string) (string, error) {
 }
 
 func fetchIframeAndExtractStreams(iframeURL string) ([]Stream, error) {
-	req, err := http.NewRequest("GET", iframeURL, nil)
+	cfg, _ := config.Load()
+	timeout := time.Duration(cfg.RequestTimeout) * time.Second
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", iframeURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +108,6 @@ func fetchIframeAndExtractStreams(iframeURL string) ([]Stream, error) {
 	re := regexp.MustCompile(`(?s)const\s+streams\s*=\s*(\[.*?\]);`)
 	matches := re.FindSubmatch(body)
 	if len(matches) < 2 {
-		// this is a really stupid way of doing this but it fucking works
 		re2 := regexp.MustCompile(`(?s)streams\s*=\s*(\[.*?\])`)
 		matches2 := re2.FindSubmatch(body)
 		if len(matches2) < 2 {
