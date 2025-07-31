@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-type EpisodeResult struct {
+type EpisodeData struct {
 	Data struct {
 		Show struct {
 			AvailableEpisodesDetail struct {
@@ -65,12 +65,12 @@ func GetEpisodes(showID string) ([]string, error) {
 		}
 		defer resp.Body.Close()
 
-		var episodeResult EpisodeResult
-		if err := json.NewDecoder(resp.Body).Decode(&episodeResult); err != nil {
+		var episodeData EpisodeData
+		if err := json.NewDecoder(resp.Body).Decode(&episodeData); err != nil {
 			return err
 		}
 
-		episodes = episodeResult.Data.Show.AvailableEpisodesDetail.Sub
+		episodes = episodeData.Data.Show.AvailableEpisodesDetail.Sub
 		return nil
 	})
 

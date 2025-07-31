@@ -9,25 +9,29 @@ import (
 )
 
 type Config struct {
-	Player         string `json:"player"`
-	PlayerArgs     string `json:"player_args"`
-	Quality        string `json:"quality"`
-	DownloadDir    string `json:"download_dir"`
-	AutoPlayNext   bool   `json:"auto_play_next"`
-	ShowSubtitles  bool   `json:"show_subtitles"`
-	CacheTTL       int    `json:"cache_ttl_minutes"`
-	RequestTimeout int    `json:"request_timeout_seconds"`
+	Player            string `json:"player"`
+	PlayerArgs        string `json:"player_args"`
+	Quality           string `json:"quality"`
+	DownloadDir       string `json:"download_dir"`
+	AutoPlayNext      bool   `json:"auto_play_next"`
+	ShowSubtitles     bool   `json:"show_subtitles"`
+	CacheTTL          int    `json:"cache_ttl_minutes"`
+	RequestTimeout    int    `json:"request_timeout_seconds"`
+	ConcurrentWorkers int    `json:"concurrent_workers"`
+	PreloadEpisodes   int    `json:"preload_episodes"`
 }
 
 var DefaultConfig = Config{
-	Player:         getDefaultPlayer(),
-	PlayerArgs:     "",
-	Quality:        "1080p",
-	DownloadDir:    getDefaultDownloadDir(),
-	AutoPlayNext:   false,
-	ShowSubtitles:  true,
-	CacheTTL:       15,
-	RequestTimeout: 10,
+	Player:            getDefaultPlayer(),
+	PlayerArgs:        "",
+	Quality:           "1080p",
+	DownloadDir:       getDefaultDownloadDir(),
+	AutoPlayNext:      false,
+	ShowSubtitles:     true,
+	CacheTTL:          15,
+	RequestTimeout:    10,
+	ConcurrentWorkers: 4,
+	PreloadEpisodes:   5,
 }
 
 func getDefaultPlayer() string {
@@ -95,6 +99,12 @@ func Load() (*Config, error) {
 	if config.RequestTimeout <= 0 {
 		config.RequestTimeout = DefaultConfig.RequestTimeout
 	}
+	if config.ConcurrentWorkers <= 0 {
+		config.ConcurrentWorkers = DefaultConfig.ConcurrentWorkers
+	}
+	if config.PreloadEpisodes < 0 {
+		config.PreloadEpisodes = DefaultConfig.PreloadEpisodes
+	}
 
 	return &config, nil
 }
@@ -135,6 +145,14 @@ func (c *Config) Set(key, value string) error {
 		if timeout, err := strconv.Atoi(value); err == nil && timeout > 0 {
 			c.RequestTimeout = timeout
 		}
+	case "concurrent_workers":
+		if workers, err := strconv.Atoi(value); err == nil && workers > 0 {
+			c.ConcurrentWorkers = workers
+		}
+	case "preload_episodes":
+		if episodes, err := strconv.Atoi(value); err == nil && episodes >= 0 {
+			c.PreloadEpisodes = episodes
+		}
 	}
 	return Save(c)
 }
@@ -163,6 +181,10 @@ func (c *Config) Get(key string) string {
 		return strconv.Itoa(c.CacheTTL)
 	case "request_timeout_seconds":
 		return strconv.Itoa(c.RequestTimeout)
+	case "concurrent_workers":
+		return strconv.Itoa(c.ConcurrentWorkers)
+	case "preload_episodes":
+		return strconv.Itoa(c.PreloadEpisodes)
 	default:
 		return ""
 	}

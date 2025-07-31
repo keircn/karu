@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/keircn/karu/internal/player"
 	"github.com/keircn/karu/internal/scraper"
@@ -37,7 +38,10 @@ var searchCmd = &cobra.Command{
 
 		if episode != nil {
 			fmt.Printf("You chose episode: %s\n", *episode)
-			videoURL, err := scraper.GetVideoURL(selection.ShowID, *episode)
+
+			scraper.PreloadAdjacentEpisodes(selection.ShowID, selection.Episodes, *episode)
+
+			videoURL, err := scraper.GetVideoURLConcurrent(selection.ShowID, *episode, 15*time.Second)
 			if err != nil {
 				fmt.Printf("Error getting video URL: %v\n", err)
 				return
