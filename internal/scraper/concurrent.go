@@ -15,10 +15,10 @@ type EpisodeJob struct {
 }
 
 type LoadResult struct {
-	ShowID   string
-	Episode  string
-	VideoURL string
-	Error    error
+	ShowID    string
+	Episode   string
+	Qualities *QualityChoice
+	Error     error
 }
 
 type ConcurrentLoader struct {
@@ -73,32 +73,31 @@ func (cl *ConcurrentLoader) worker() {
 }
 
 func (cl *ConcurrentLoader) processJob(job EpisodeJob) LoadResult {
-	cacheKey := generateCacheKey("video", map[string]interface{}{
+	cacheKey := generateCacheKey("quality", map[string]interface{}{
 		"showId":  job.ShowID,
 		"episode": job.Episode,
 	})
 
 	if cached, found := cl.videoCache.Get(cacheKey); found {
 		return LoadResult{
-			ShowID:   job.ShowID,
-			Episode:  job.Episode,
-			VideoURL: cached.(string),
+			ShowID:    job.ShowID,
+			Episode:   job.Episode,
+			Qualities: cached.(*QualityChoice),
 		}
 	}
 
-	videoURL, err := GetVideoURL(job.ShowID, job.Episode)
-	if err == nil && videoURL != "" {
-		cl.videoCache.Set(cacheKey, videoURL)
+	qualities, err := GetAvailableQualities(job.ShowID, job.Episode)
+	if err == nil && qualities != nil {
+		cl.videoCache.Set(cacheKey, qualities)
 	}
 
 	return LoadResult{
-		ShowID:   job.ShowID,
-		Episode:  job.Episode,
-		VideoURL: videoURL,
-		Error:    err,
+		ShowID:    job.ShowID,
+		Episode:   job.Episode,
+		Qualities: qualities,
+		Error:     err,
 	}
 }
-
 func (cl *ConcurrentLoader) LoadEpisode(showID, episode string, priority int) {
 	job := EpisodeJob{
 		ShowID:   showID,
@@ -204,13 +203,16 @@ func PreloadAdjacentEpisodes(showID string, episodes []string, currentEpisode st
 func GetVideoURLConcurrent(showID, episode string, timeout time.Duration) (string, error) {
 	loader := GetGlobalLoader()
 
-	cacheKey := generateCacheKey("video", map[string]interface{}{
+	cacheKey := generateCacheKey("quality", map[string]interface{}{
 		"showId":  showID,
 		"episode": episode,
 	})
 
 	if cached, found := loader.videoCache.Get(cacheKey); found {
-		return cached.(string), nil
+		qualities := cached.(*QualityChoice)
+		if len(qualities.Options) > 0 {
+			return qualities.Options[qualities.Default].URL, nil
+		}
 	}
 
 	loader.LoadEpisode(showID, episode, 10)
@@ -224,5 +226,9 @@ func GetVideoURLConcurrent(showID, episode string, timeout time.Duration) (strin
 		return "", result.Error
 	}
 
-	return result.VideoURL, nil
+	if result.Qualities != nil && len(result.Qualities.Options) > 0 {
+		return result.Qualities.Options[result.Qualities.Default].URL, nil
+	}
+
+	return GetVideoURL(showID, episode)
 }

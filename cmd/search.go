@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
+	"github.com/keircn/karu/internal/config"
 	"github.com/keircn/karu/internal/player"
 	"github.com/keircn/karu/internal/scraper"
 	"github.com/keircn/karu/internal/ui"
@@ -21,6 +21,8 @@ var searchCmd = &cobra.Command{
 		if len(args) > 0 {
 			query = args[0]
 		}
+
+		autoQuality, _ := cmd.Flags().GetBool("auto-quality")
 
 		selection, err := workflow.GetAnimeSelection(query)
 		if err != nil {
@@ -41,18 +43,40 @@ var searchCmd = &cobra.Command{
 
 			scraper.PreloadAdjacentEpisodes(selection.ShowID, selection.Episodes, *episode)
 
-			videoURL, err := scraper.GetVideoURLConcurrent(selection.ShowID, *episode, 15*time.Second)
+			if autoQuality {
+				cfg, _ := config.Load()
+				videoURL, err := scraper.GetVideoURLWithQuality(selection.ShowID, *episode, cfg.Quality)
+				if err != nil {
+					fmt.Printf("Error getting video URL: %v\n", err)
+					return
+				}
+
+				if err := player.Play(videoURL); err != nil {
+					fmt.Printf("Error playing video: %v\n", err)
+				}
+				return
+			}
+
+			qualities, err := scraper.GetAvailableQualities(selection.ShowID, *episode)
 			if err != nil {
-				fmt.Printf("Error getting video URL: %v\n", err)
+				fmt.Printf("Error getting video qualities: %v\n", err)
 				return
 			}
 
-			if videoURL == "" {
-				fmt.Println("No video URL found for this episode.")
+			selectedQuality, err := ui.SelectQuality(qualities)
+			if err != nil {
+				fmt.Printf("Error selecting quality: %v\n", err)
 				return
 			}
 
-			if err := player.Play(videoURL); err != nil {
+			if selectedQuality == nil {
+				fmt.Println("No quality selected.")
+				return
+			}
+
+			fmt.Printf("Selected quality: %s\n", selectedQuality.Quality)
+
+			if err := player.Play(selectedQuality.URL); err != nil {
 				fmt.Printf("Error playing video: %v\n", err)
 			}
 		}
@@ -61,4 +85,5 @@ var searchCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(searchCmd)
+	searchCmd.Flags().BoolP("auto-quality", "a", false, "Automatically select quality based on config")
 }
