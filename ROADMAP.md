@@ -58,7 +58,7 @@
 - [ ] Add proper exit handling in interactive menus
 
 ### Scraping Reliability
-- [ ] Add user-agent rotation to avoid blocking
+- [x] Add user-agent rotation to avoid blocking
 - [ ] Implement source failover when primary source fails
 - [ ] Handle different video source formats
 - [ ] Add rate limiting to prevent IP blocking

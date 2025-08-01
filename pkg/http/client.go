@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/keircn/karu/pkg/errors"
@@ -16,8 +18,10 @@ import (
 
 type Client struct {
 	httpClient *http.Client
-	userAgent  string
+	userAgents []string
 	referer    string
+	mu         sync.Mutex
+	rand       *rand.Rand
 }
 
 type ClientOption func(*Client)
@@ -30,7 +34,13 @@ func WithTimeout(timeout time.Duration) ClientOption {
 
 func WithUserAgent(userAgent string) ClientOption {
 	return func(c *Client) {
-		c.userAgent = userAgent
+		c.userAgents = []string{userAgent}
+	}
+}
+
+func WithUserAgents(userAgents []string) ClientOption {
+	return func(c *Client) {
+		c.userAgents = userAgents
 	}
 }
 
@@ -45,7 +55,14 @@ func NewClient(opts ...ClientOption) *Client {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+		userAgents: []string{
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+		},
+		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	for _, opt := range opts {
@@ -53,6 +70,17 @@ func NewClient(opts ...ClientOption) *Client {
 	}
 
 	return client
+}
+
+func (c *Client) getUserAgent() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.userAgents) == 0 {
+		return ""
+	}
+
+	return c.userAgents[c.rand.Intn(len(c.userAgents))]
 }
 
 func (c *Client) PostJSON(ctx context.Context, url string, payload interface{}) (*http.Response, error) {
@@ -67,8 +95,8 @@ func (c *Client) PostJSON(ctx context.Context, url string, payload interface{}) 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
+	if userAgent := c.getUserAgent(); userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
 	}
 	if c.referer != "" {
 		req.Header.Set("Referer", c.referer)
@@ -93,8 +121,8 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 		return nil, errors.Wrap(err, errors.NetworkError, "failed to create HTTP request")
 	}
 
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
+	if userAgent := c.getUserAgent(); userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
 	}
 	if c.referer != "" {
 		req.Header.Set("Referer", c.referer)
