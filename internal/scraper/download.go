@@ -1,11 +1,14 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -83,6 +86,21 @@ func DownloadEpisodeWithProgress(showID, episode, outputPath string) error {
 	}
 	defer out.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		fmt.Printf("\nDownload interrupted, cleaning up...\n")
+		cancel()
+		out.Close()
+		os.Remove(outputPath)
+		os.Exit(1)
+	}()
+
 	contentLength := resp.ContentLength
 	filename := filepath.Base(outputPath)
 
@@ -94,9 +112,23 @@ func DownloadEpisodeWithProgress(showID, episode, outputPath string) error {
 		writer = io.MultiWriter(out, pw)
 	}
 
-	_, err = io.Copy(writer, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to write video data: %w", err)
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(writer, resp.Body)
+		done <- err
+	}()
+
+	select {
+	case <-ctx.Done():
+		out.Close()
+		os.Remove(outputPath)
+		return fmt.Errorf("download cancelled")
+	case err := <-done:
+		if err != nil {
+			out.Close()
+			os.Remove(outputPath)
+			return fmt.Errorf("failed to write video data: %w", err)
+		}
 	}
 
 	fmt.Printf("\nDownload completed: %s\n", outputPath)
