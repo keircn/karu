@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -71,6 +72,15 @@ func parseRangeSelection(rangeStr string, availableEpisodes []string) ([]string,
 		return nil, fmt.Errorf("no episodes found in range %d-%d", start, end)
 	}
 
+	sort.Slice(result, func(i, j int) bool {
+		numI, errI := strconv.Atoi(result[i])
+		numJ, errJ := strconv.Atoi(result[j])
+		if errI != nil || errJ != nil {
+			return result[i] < result[j]
+		}
+		return numI < numJ
+	})
+
 	return result, nil
 }
 
@@ -104,7 +114,16 @@ func DownloadEpisodes(selection *AnimeSelection, opts DownloadOptions) (*Downloa
 	var episodesToDownload []string
 
 	if opts.All {
-		episodesToDownload = selection.Episodes
+		episodesToDownload = make([]string, len(selection.Episodes))
+		copy(episodesToDownload, selection.Episodes)
+		sort.Slice(episodesToDownload, func(i, j int) bool {
+			numI, errI := strconv.Atoi(episodesToDownload[i])
+			numJ, errJ := strconv.Atoi(episodesToDownload[j])
+			if errI != nil || errJ != nil {
+				return episodesToDownload[i] < episodesToDownload[j]
+			}
+			return numI < numJ
+		})
 	} else if opts.Range != "" {
 		episodesToDownload, err = ParseEpisodeRange(opts.Range, selection.Episodes)
 		if err != nil {
