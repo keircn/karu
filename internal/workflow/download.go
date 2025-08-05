@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -125,9 +126,18 @@ func DownloadEpisodes(selection *AnimeSelection, opts DownloadOptions) (*Downloa
 			fmt.Printf("Downloading episode: %s\n", episode)
 		}
 
+		seriesDir := strings.ReplaceAll(selection.Anime.Title, " ", "_")
+		seriesPath := filepath.Join(cfg.DownloadDir, seriesDir)
+
+		if err := os.MkdirAll(seriesPath, 0755); err != nil {
+			fmt.Printf("Error creating series directory %s: %v\n", seriesPath, err)
+			result.Failed++
+			continue
+		}
+
 		filename := fmt.Sprintf("%s_episode_%s.mp4",
 			strings.ReplaceAll(selection.Anime.Title, " ", "_"), episode)
-		outputPath := filepath.Join(cfg.DownloadDir, filename)
+		outputPath := filepath.Join(seriesPath, filename)
 
 		if err := scraper.DownloadEpisodeWithProgress(selection.ShowID, episode, outputPath); err != nil {
 			fmt.Printf("Error downloading episode %s: %v\n", episode, err)
