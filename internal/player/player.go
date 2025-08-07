@@ -2,6 +2,7 @@ package player
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/keircn/karu/internal/config"
+	"github.com/keircn/karu/pkg/validation"
 )
 
 type PlaybackInfo struct {
@@ -59,9 +61,17 @@ var (
 )
 
 func Play(videoURL string) error {
+	if err := validation.ValidateURL(videoURL); err != nil {
+		return fmt.Errorf("invalid video URL: %v", err)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = &config.DefaultConfig
+	}
+
+	if err := cfg.ValidatePlayer(); err != nil {
+		return err
 	}
 
 	args := []string{videoURL}
@@ -75,6 +85,19 @@ func Play(videoURL string) error {
 	cmd.Stderr = nil
 
 	if err := cmd.Run(); err != nil {
+		fallbacks := cfg.GetFallbackPlayers()
+		for _, fallbackPlayer := range fallbacks {
+			if isPlayerAvailable(fallbackPlayer) || fileExists(fallbackPlayer) {
+				fallbackCmd := exec.Command(fallbackPlayer, videoURL)
+				fallbackCmd.Stdout = nil
+				fallbackCmd.Stderr = nil
+				if fallbackErr := fallbackCmd.Run(); fallbackErr == nil {
+					cfg.Player = fallbackPlayer
+					config.Save(cfg)
+					return nil
+				}
+			}
+		}
 		return formatPlayerError(err, cfg.Player)
 	}
 	return nil
@@ -392,4 +415,14 @@ func findEpisodeIndex(episodes []string, target string) int {
 		}
 	}
 	return -1
+}
+
+func isPlayerAvailable(player string) bool {
+	_, err := exec.LookPath(player)
+	return err == nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

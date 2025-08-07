@@ -17,11 +17,39 @@ import (
 )
 
 type Client struct {
-	httpClient *http.Client
-	userAgents []string
-	referer    string
-	mu         sync.Mutex
-	rand       *rand.Rand
+	httpClient  *http.Client
+	userAgents  []string
+	referer     string
+	mu          sync.Mutex
+	rand        *rand.Rand
+	rateLimiter *rateLimiter
+}
+
+type rateLimiter struct {
+	lastRequest time.Time
+	minInterval time.Duration
+	mu          sync.Mutex
+}
+
+func newRateLimiter(requestsPerSecond float64) *rateLimiter {
+	minInterval := time.Duration(float64(time.Second) / requestsPerSecond)
+	return &rateLimiter{
+		minInterval: minInterval,
+	}
+}
+
+func (rl *rateLimiter) Wait() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(rl.lastRequest)
+
+	if elapsed < rl.minInterval {
+		time.Sleep(rl.minInterval - elapsed)
+	}
+
+	rl.lastRequest = time.Now()
 }
 
 type ClientOption func(*Client)
@@ -62,7 +90,8 @@ func NewClient(opts ...ClientOption) *Client {
 			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
 		},
-		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
+		rand:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		rateLimiter: newRateLimiter(2.0),
 	}
 
 	for _, opt := range opts {
@@ -84,6 +113,8 @@ func (c *Client) getUserAgent() string {
 }
 
 func (c *Client) PostJSON(ctx context.Context, url string, payload interface{}) (*http.Response, error) {
+	c.rateLimiter.Wait()
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.NetworkError, "failed to marshal JSON payload")
@@ -116,6 +147,8 @@ func (c *Client) PostJSON(ctx context.Context, url string, payload interface{}) 
 }
 
 func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
+	c.rateLimiter.Wait()
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.NetworkError, "failed to create HTTP request")

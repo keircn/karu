@@ -108,6 +108,10 @@ func (m episodeModel) View() string {
 }
 
 func SelectEpisode(episodes []string, showTitle string) (*string, error) {
+	if len(episodes) == 0 {
+		return nil, fmt.Errorf("no episodes available")
+	}
+
 	for i, j := 0, len(episodes)-1; i < j; i, j = i+1, j-1 {
 		episodes[i], episodes[j] = episodes[j], episodes[i]
 	}
@@ -117,14 +121,27 @@ func SelectEpisode(episodes []string, showTitle string) (*string, error) {
 
 	finalModel, err := p.Run()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("episode selection failed: %v", err)
 	}
 
-	result := finalModel.(episodeModel).GetChoice()
+	episodeModel, ok := finalModel.(episodeModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type in episode selection")
+	}
+
+	result := episodeModel.GetChoice()
 	if result == nil {
 		return nil, nil
 	}
 
-	episode := result.(string)
+	episode, ok := result.(string)
+	if !ok {
+		return nil, fmt.Errorf("invalid episode selection")
+	}
+
+	if episode == "" {
+		return nil, fmt.Errorf("empty episode selected")
+	}
+
 	return &episode, nil
 }

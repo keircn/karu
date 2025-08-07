@@ -3,9 +3,11 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/keircn/karu/pkg/errors"
 	"github.com/keircn/karu/pkg/validation"
@@ -38,16 +40,119 @@ var DefaultConfig = Config{
 }
 
 func getDefaultPlayer() string {
+	return detectAvailablePlayer()
+}
+
+func detectAvailablePlayer() string {
 	switch runtime.GOOS {
 	case "darwin":
-		return "iina"
+		return detectMacOSPlayer()
 	case "linux":
-		return "mpv"
+		return detectLinuxPlayer()
 	case "windows":
-		return "mpv.exe"
+		return detectWindowsPlayer()
 	default:
-		return "mpv"
+		return detectLinuxPlayer()
 	}
+}
+
+func detectMacOSPlayer() string {
+	players := []string{"iina", "mpv", "vlc"}
+
+	for _, player := range players {
+		if isPlayerAvailable(player) {
+			return player
+		}
+	}
+
+	commonPaths := []string{
+		"/Applications/IINA.app/Contents/MacOS/IINA",
+		"/Applications/VLC.app/Contents/MacOS/VLC",
+		"/usr/local/bin/mpv",
+		"/opt/homebrew/bin/mpv",
+	}
+
+	for _, path := range commonPaths {
+		if fileExists(path) {
+			return path
+		}
+	}
+
+	return "iina"
+}
+
+func detectLinuxPlayer() string {
+	players := []string{"mpv", "vlc", "mplayer"}
+
+	for _, player := range players {
+		if isPlayerAvailable(player) {
+			return player
+		}
+	}
+
+	commonPaths := []string{
+		"/usr/bin/mpv",
+		"/usr/local/bin/mpv",
+		"/usr/bin/vlc",
+		"/snap/bin/vlc",
+	}
+
+	for _, path := range commonPaths {
+		if fileExists(path) {
+			return path
+		}
+	}
+
+	return "mpv"
+}
+
+func detectWindowsPlayer() string {
+	players := []string{"mpv.exe", "vlc.exe", "mpc-hc64.exe", "mpc-hc.exe"}
+
+	for _, player := range players {
+		if isPlayerAvailable(player) {
+			return player
+		}
+	}
+
+	commonPaths := []string{
+		"C:\\Program Files\\mpv\\mpv.exe",
+		"C:\\Program Files (x86)\\mpv\\mpv.exe",
+		"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+		"C:\\Program Files (x86)\\VideoLAN\\VLC\\vlc.exe",
+		"C:\\Program Files\\MPC-HC\\mpc-hc64.exe",
+		"C:\\Program Files (x86)\\MPC-HC\\mpc-hc.exe",
+		"C:\\ProgramData\\chocolatey\\bin\\mpv.exe",
+		"C:\\tools\\mpv\\mpv.exe",
+	}
+
+	for _, path := range commonPaths {
+		if fileExists(path) {
+			return path
+		}
+	}
+
+	pathEnv := os.Getenv("PATH")
+	pathDirs := strings.Split(pathEnv, ";")
+	for _, dir := range pathDirs {
+		for _, player := range players {
+			fullPath := filepath.Join(dir, player)
+			if fileExists(fullPath) {
+				return fullPath
+			}
+		}
+	}
+
+	return "mpv.exe"
+}
+func isPlayerAvailable(player string) bool {
+	_, err := exec.LookPath(player)
+	return err == nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func getDefaultDownloadDir() string {
@@ -238,6 +343,35 @@ func (c *Config) Set(key, value string) error {
 	}
 
 	return Save(c)
+}
+
+func (c *Config) GetFallbackPlayers() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"iina", "mpv", "vlc", "/Applications/IINA.app/Contents/MacOS/IINA", "/Applications/VLC.app/Contents/MacOS/VLC"}
+	case "linux":
+		return []string{"mpv", "vlc", "mplayer", "/usr/bin/mpv", "/usr/bin/vlc"}
+	case "windows":
+		return []string{"mpv.exe", "vlc.exe", "mpc-hc64.exe", "mpc-hc.exe"}
+	default:
+		return []string{"mpv", "vlc"}
+	}
+}
+
+func (c *Config) ValidatePlayer() error {
+	if isPlayerAvailable(c.Player) || fileExists(c.Player) {
+		return nil
+	}
+
+	fallbacks := c.GetFallbackPlayers()
+	for _, player := range fallbacks {
+		if isPlayerAvailable(player) || fileExists(player) {
+			c.Player = player
+			return Save(c)
+		}
+	}
+
+	return errors.New(errors.ValidationError, "no valid video player found. Please install mpv, vlc, or configure a custom player path")
 }
 
 func (c *Config) Get(key string) string {
