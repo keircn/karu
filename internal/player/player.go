@@ -3,6 +3,7 @@ package player
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -72,7 +73,11 @@ func Play(videoURL string) error {
 	cmd := exec.Command(cfg.Player, args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	return cmd.Run()
+
+	if err := cmd.Run(); err != nil {
+		return formatPlayerError(err, cfg.Player)
+	}
+	return nil
 }
 
 func PlayWithAutoNext(info *PlaybackInfo, getVideoURLFunc func(showID, episode string) (string, error)) error {
@@ -105,6 +110,7 @@ func PlayWithAutoNext(info *PlaybackInfo, getVideoURLFunc func(showID, episode s
 	go func() {
 		cmd, err := startVideoProcess(info.VideoURL, cfg)
 		if err != nil {
+			m.status = fmt.Sprintf("Player error: %v", err)
 			return
 		}
 		m.currentProcess = cmd
@@ -172,7 +178,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cfg, _ := config.Load()
 				cmd, err := startVideoProcess(videoURL, cfg)
 				if err != nil {
-					m.status = fmt.Sprintf("Error starting player: %v", err)
+					m.status = fmt.Sprintf("Player error: %v", err)
 					return
 				}
 				m.currentProcess = cmd
@@ -212,7 +218,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cfg, _ := config.Load()
 				cmd, err := startVideoProcess(videoURL, cfg)
 				if err != nil {
-					m.status = fmt.Sprintf("Error starting player: %v", err)
+					m.status = fmt.Sprintf("Player error: %v", err)
 					return
 				}
 				m.currentProcess = cmd
@@ -320,8 +326,58 @@ func startVideoProcess(videoURL string, cfg *config.Config) (*exec.Cmd, error) {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 
-	err := cmd.Start()
-	return cmd, err
+	if err := cmd.Start(); err != nil {
+		return nil, formatPlayerError(err, cfg.Player)
+	}
+	return cmd, nil
+}
+
+func formatPlayerError(err error, player string) error {
+	if strings.Contains(err.Error(), "executable file not found") ||
+		strings.Contains(err.Error(), "no such file or directory") {
+		return fmt.Errorf("video player '%s' not found\n\nTo fix this:\n• Install %s: %s\n• Or configure a different player: karu config set player <path-to-player>",
+			player, player, getInstallInstructions(player))
+	}
+	if strings.Contains(err.Error(), "permission denied") {
+		return fmt.Errorf("permission denied when running '%s'\n\nTo fix this:\n• Make sure %s is executable: chmod +x %s\n• Or configure a different player: karu config set player <path-to-player>",
+			player, player, player)
+	}
+	return fmt.Errorf("failed to start video player '%s': %v\n\nTry:\n• karu config set player <path-to-different-player>\n• Check if %s is working: %s --version",
+		player, err, player, player)
+}
+
+func getInstallInstructions(player string) string {
+	switch player {
+	case "mpv":
+		switch runtime.GOOS {
+		case "darwin":
+			return "brew install mpv"
+		case "linux":
+			return "sudo apt install mpv (Ubuntu/Debian) or sudo pacman -S mpv (Arch) or sudo dnf install mpv (Fedora)"
+		case "windows":
+			return "Download from https://mpv.io/installation/ or use winget install mpv"
+		default:
+			return "Visit https://mpv.io/installation/"
+		}
+	case "iina":
+		if runtime.GOOS == "darwin" {
+			return "brew install --cask iina or download from https://iina.io/"
+		}
+		return "IINA is only available on macOS"
+	case "vlc":
+		switch runtime.GOOS {
+		case "darwin":
+			return "brew install --cask vlc"
+		case "linux":
+			return "sudo apt install vlc (Ubuntu/Debian) or sudo pacman -S vlc (Arch)"
+		case "windows":
+			return "Download from https://www.videolan.org/vlc/"
+		default:
+			return "Visit https://www.videolan.org/vlc/"
+		}
+	default:
+		return fmt.Sprintf("Check documentation for %s installation", player)
+	}
 }
 
 func findEpisodeIndex(episodes []string, target string) int {
